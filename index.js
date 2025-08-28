@@ -175,20 +175,24 @@ function scheduleDeleteIfEmpty(channelId, guild) {
 async function createTempVCFor(member) {
   const guild = member.guild;
 
-  const name = (TEMP_VC_NAME_FMT || 'War Chamber — {user}').replace(
-    '{user}',
-    member.displayName
-  );
+  const name = (TEMP_VC_NAME_FMT || 'War Chamber — {user}')
+    .replace('{user}', member.displayName);
 
-  // Private by default (no hopping): @everyone denied Connect
+  // Private by default + NO INVITES anywhere in this room
   const overwrites = [
+    // @everyone: can't connect, can't create invites
     {
       id: guild.roles.everyone.id,
-      deny: [PermissionFlagsBits.Connect],
+      deny: [
+        PermissionFlagsBits.Connect,
+        PermissionFlagsBits.CreateInstantInvite, // 🚫 no invites
+      ],
     },
+    // Owner: full control to run the room, but still NO invites
     {
       id: member.id,
       allow: [
+        PermissionFlagsBits.ViewChannel,
         PermissionFlagsBits.Connect,
         PermissionFlagsBits.Speak,
         PermissionFlagsBits.Stream,
@@ -197,6 +201,22 @@ async function createTempVCFor(member) {
         PermissionFlagsBits.DeafenMembers,
         PermissionFlagsBits.MoveMembers,
         PermissionFlagsBits.ManageChannels,
+      ],
+      deny: [
+        PermissionFlagsBits.CreateInstantInvite, // 🚫 no invites for owner either
+      ],
+    },
+    // Bot: make sure it can manage/move here regardless of category perms
+    {
+      id: guild.members.me.id, // same as client.user.id but cached
+      allow: [
+        PermissionFlagsBits.ViewChannel,
+        PermissionFlagsBits.Connect,
+        PermissionFlagsBits.MoveMembers,
+        PermissionFlagsBits.ManageChannels,
+      ],
+      deny: [
+        PermissionFlagsBits.CreateInstantInvite, // (not needed, but explicit)
       ],
     },
   ];
@@ -212,12 +232,12 @@ async function createTempVCFor(member) {
 
   tempOwners.set(ch.id, member.id);
 
-  // Move the member into their room (best effort)
+  // Move the member into their new chamber (best-effort)
   try {
     await member.voice.setChannel(ch);
   } catch {}
 
-  // Start delete timer guard
+  // Start deletion guard
   scheduleDeleteIfEmpty(ch.id, guild);
 }
 
