@@ -1,25 +1,34 @@
 import 'dotenv/config';
 import { REST, Routes, SlashCommandBuilder } from 'discord.js';
 
-const cmd = new SlashCommandBuilder()
+const straysCmd = new SlashCommandBuilder()
   .setName('strays')
-  .setDescription('Create a limited Stray Spore invite to the Spore Box')
+  .setDescription('Conjure guest passes to #spore-box (24h)')
   .addIntegerOption(opt =>
     opt.setName('count')
-      .setDescription('Uses (default 4, max 10)')
+      .setDescription('Number of guest passes (default 4, max 10)')
       .setMinValue(1)
-      .setMaxValue(parseInt(process.env.MAX_USES || '10', 10))
+      .setMaxValue(10)
   );
+
+const vcCmd = new SlashCommandBuilder()
+  .setName('vc')
+  .setDescription('Move yourself to your host’s War Chamber')
+  .addStringOption(o =>
+    o.setName('host')
+      .setDescription('Pick your host (current War Chamber owner)')
+      .setAutocomplete(true)
+      .setRequired(true)
+  );
+
+const commands = [straysCmd, vcCmd].map(c => c.toJSON());
 
 const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_TOKEN);
 
-try {
-  const app = await rest.get(Routes.oauth2CurrentApplication());
+(async () => {
   await rest.put(
-    Routes.applicationGuildCommands(app.id, process.env.GUILD_ID),
-    { body: [cmd.toJSON()] }
+    Routes.applicationGuildCommands(process.env.CLIENT_ID, process.env.GUILD_ID),
+    { body: commands }
   );
-  console.log('✅ Slash command deployed to guild.');
-} catch (err) {
-  console.error('Deploy error:', err);
-}
+  console.log('Slash command deployed to guild.');
+})();
