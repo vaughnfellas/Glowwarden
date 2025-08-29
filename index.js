@@ -12,7 +12,7 @@ const app = express();
 app.get('/', (_req, res) => res.send('Spore Inviter up'));
 app.get('/healthz', (_req, res) => res.send('ok'));
 const port = process.env.PORT || 3000;
-app.listen(port, () => console.log(Health server listening on ${port}));
+app.listen(port, () => console.log(`Health server listening on ${port}`));
 
 // ------------------ ENV ------------------
 const TOKEN = process.env.DISCORD_TOKEN;
@@ -37,6 +37,9 @@ const TEMP_VC_USER_LIMIT = process.env.TEMP_VC_USER_LIMIT
 // Temp Host role (grant on create, remove when owner leaves / room deletes)
 const TEMP_HOST_ROLE_ID = process.env.TEMP_HOST_ROLE_ID || '1410629664522764318';
 
+// Sweep settings
+const SWEEP_INTERVAL_SEC = Number(process.env.SWEEP_INTERVAL_SEC || 600); // 10 min default
+
 // ------------------ CLIENT ------------------
 const client = new Client({
   intents: [
@@ -60,7 +63,7 @@ function scheduleDeleteIfEmpty(channelId, guild) {
         (await guild.channels.fetch(channelId).catch(() => null));
       if (!ch || ch.type !== ChannelType.GuildVoice) return;
 
-      // Only delete channels we’re tracking as temp
+      // Only delete channels we're tracking as temp
       if (ch.members.size === 0 && tempOwners.has(channelId)) {
         const ownerId = tempOwners.get(channelId);
 
@@ -87,6 +90,54 @@ function scheduleDeleteIfEmpty(channelId, guild) {
   }, TEMP_VC_DELETE_AFTER * 1000);
 
   deleteTimers.set(channelId, t);
+}
+
+// === helper: sweep Battlefront category and delete empty temp rooms ===
+async function sweepTempRooms() {
+  try {
+    if (!GUILD_ID || !TEMP_VC_CATEGORY_ID) return;
+
+    const guild = await client.guilds.fetch(GUILD_ID);
+    const category = await guild.channels.fetch(TEMP_VC_CATEGORY_ID).catch(() => null);
+
+    if (!category) return;
+
+    const children =
+      category.children?.cache ??
+      guild.channels.cache.filter(c => c.parentId === TEMP_VC_CATEGORY_ID);
+
+    for (const ch of children.values()) {
+      if (ch.type !== ChannelType.GuildVoice) continue;
+      if (ch.members.size > 0) continue; // only empty rooms
+
+      // If we tracked ownership, clean up host role first
+      if (tempOwners.has(ch.id)) {
+        const ownerId = tempOwners.get(ch.id);
+        if (ownerId && TEMP_HOST_ROLE_ID) {
+          try {
+            const owner = await guild.members.fetch(ownerId).catch(() => null);
+            if (owner?.roles.cache.has(TEMP_HOST_ROLE_ID)) {
+              await owner.roles.remove(TEMP_HOST_ROLE_ID);
+            }
+          } catch {}
+        }
+
+        tempOwners.delete(ch.id);
+        const t = deleteTimers.get(ch.id);
+        if (t) clearTimeout(t);
+        deleteTimers.delete(ch.id);
+      }
+
+      try {
+        await ch.delete('Periodic sweep: empty temp VC in Battlefront');
+        console.log('🧹 Sweep deleted:', ch.id, ch.name);
+      } catch (e) {
+        console.error('Sweep delete failed:', ch.id, e);
+      }
+    }
+  } catch (e) {
+    console.error('Sweep error:', e);
+  }
 }
 
 async function createTempVCFor(member) {
@@ -140,7 +191,7 @@ async function createTempVCFor(member) {
     parent: TEMP_VC_CATEGORY_ID,
     userLimit: TEMP_VC_USER_LIMIT ?? undefined,
     permissionOverwrites: overwrites,
-    reason: Temp VC for ${member.user.tag},
+    reason: `Temp VC for ${member.user.tag}`,
   });
 
   tempOwners.set(ch.id, member.id);
@@ -158,45 +209,24 @@ async function createTempVCFor(member) {
   // Start deletion guard immediately
   scheduleDeleteIfEmpty(ch.id, guild);
 
-  console.log('🛠️ Created temp VC for', member.user.tag, '->', ch.name, (${ch.id}));
+  console.log('🛠️ Created temp VC for', member.user.tag, '->', ch.name, `(${ch.id})`);
 }
 
 // ------------------ READY ------------------
 client.once('clientReady', async () => {
-  console.log(✅ Logged in as ${client.user.tag});
+  console.log(`✅ Logged in as ${client.user.tag}`);
 
   // Startup sweep: delete any empty orphan War Chambers after restarts
-  try {
-    if (!GUILD_ID || !TEMP_VC_CATEGORY_ID) return;
+  await sweepTempRooms();
 
-    const guild = await client.guilds.fetch(GUILD_ID);
-    const category = await guild.channels.fetch(TEMP_VC_CATEGORY_ID).catch(() => null);
+  // periodic sweep
+  setInterval(sweepTempRooms, SWEEP_INTERVAL_SEC * 1000);
+});
 
-    if (!category) return;
-
-    // Get children under the category (compat for some caches)
-    const children =
-      category.children?.cache ??
-      guild.channels.cache.filter(c => c.parentId === TEMP_VC_CATEGORY_ID);
-
-    const prefix = (TEMP_VC_NAME_FMT || 'War Chamber').split(' — ')[0];
-
-    for (const ch of children.values()) {
-      if (ch.type !== ChannelType.GuildVoice) continue;
-
-      const looksLikeTemp = ch.name.startsWith(prefix);
-      if (looksLikeTemp && ch.members.size === 0) {
-        try {
-          await ch.delete('Startup sweep: orphan temp VC');
-          console.log('🧹 Swept orphan VC:', ch.id);
-        } catch (e) {
-          console.error('Startup sweep delete failed:', ch.id, e);
-        }
-      }
-    }
-  } catch (e) {
-    console.error('Startup sweep error:', e);
-  }
+// === optional: manual sweep endpoint ===
+app.get('/sweep', async (_req, res) => {
+  await sweepTempRooms();
+  res.send('sweep-ok');
 });
 
 // ------------------ SLASH COMMANDS ------------------
@@ -215,7 +245,7 @@ client.on('interactionCreate', async (interaction) => {
     try {
       const spore = await client.channels.fetch(SPORE_BOX_CHANNEL_ID);
       if (!spore || spore.type !== ChannelType.GuildText) {
-        await interaction.editReply('❌ I can’t find *#spore-box*. Check SPORE_BOX_CHANNEL_ID in your .env.');
+        await interaction.editReply('❌ I can't find *#spore-box*. Check SPORE_BOX_CHANNEL_ID in your .env.');
         return;
       }
 
@@ -230,13 +260,13 @@ client.on('interactionCreate', async (interaction) => {
         maxAge: 86400, // 24h
         maxUses: uses,
         unique: true,
-        reason: Strays by ${interaction.user.tag} (${interaction.user.id}),
+        reason: `Strays by ${interaction.user.tag} (${interaction.user.id})`,
       });
 
       // RP flourish to the channel they ran the command in (best-effort)
       try {
         await interaction.channel?.send(
-         🌿 ${interaction.user} loosens a spore-satchel; **${uses}** guest passes swirl into being.`
+          `🌿 ${interaction.user} loosens a spore-satchel; **${uses}** guest passes swirl into being.`
         );
       } catch {}
 
@@ -245,10 +275,10 @@ client.on('interactionCreate', async (interaction) => {
       try {
         await interaction.user.send(
           [
-            Here are your guest passes for **#spore-box** (valid 24h, **${uses}** uses):,
+            `Here are your guest passes for **#spore-box** (valid 24h, **${uses}** uses):`,
             invite.url,
             '',
-            '_Need a temp voice channel? Join *Sporehall* and I’ll conjure one for you._',
+            '_Need a temp voice channel? Join *Sporehall* and I'll conjure one for you._',
           ].join('\n')
         );
       } catch {
@@ -259,7 +289,7 @@ client.on('interactionCreate', async (interaction) => {
         await interaction.editReply('✉️ Your passes have been sent to your DMs.');
       } else {
         await interaction.editReply(
-          ⚠️ I couldn’t DM you (privacy settings). Here’s your invite (only you can see this):\n${invite.url}
+          `⚠️ I couldn't DM you (privacy settings). Here's your invite (only you can see this):\n${invite.url}`
         );
       }
 
@@ -271,12 +301,12 @@ client.on('interactionCreate', async (interaction) => {
             const expiresTs = Math.floor(Date.now() / 1000) + 86400;
             await log.send(
               [
-               📜 **Strays Issued**`,
-                • By: ${interaction.user} (${interaction.user.tag}),
-                • Uses: **${uses}**,
-                • Link: ${invite.url},
-                • Expires: <t:${expiresTs}:R>,
-                • Channel: <#${SPORE_BOX_CHANNEL_ID}>,
+                `📜 **Strays Issued**`,
+                `• By: ${interaction.user} (${interaction.user.tag})`,
+                `• Uses: **${uses}**`,
+                `• Link: ${invite.url}`,
+                `• Expires: <t:${expiresTs}:R>`,
+                `• Channel: <#${SPORE_BOX_CHANNEL_ID}>`,
               ].join('\n')
             );
           }
@@ -310,24 +340,24 @@ client.on('interactionCreate', async (interaction) => {
     // find host's chamber
     const entry = [...tempOwners.entries()].find(([, owner]) => owner === hostId);
     if (!entry) {
-      await interaction.reply({ content: '❌ I can’t find a War Chamber for that host right now.', flags: 64 });
+      await interaction.reply({ content: '❌ I can't find a War Chamber for that host right now.', flags: 64 });
       return;
     }
 
     const [chamberId] = entry;
     const chamber = await interaction.guild.channels.fetch(chamberId).catch(() => null);
     if (!chamber || chamber.type !== ChannelType.GuildVoice) {
-      await interaction.reply({ content: '❌ That War Chamber doesn’t seem to exist anymore.', flags: 64 });
+      await interaction.reply({ content: '❌ That War Chamber doesn't seem to exist anymore.', flags: 64 });
       return;
     }
 
     try {
       await member.voice.setChannel(chamber);
-      await interaction.reply({ content: ✅ Moved you to **${chamber.name}**., flags: 64 });
+      await interaction.reply({ content: `✅ Moved you to **${chamber.name}**.`, flags: 64 });
     } catch (e) {
       console.error('vc move failed:', e);
       await interaction.reply({
-        content: '❌ I couldn’t move you. I need *Move Members* in both channels.',
+        content: '❌ I couldn't move you. I need *Move Members* in both channels.',
         flags: 64,
       });
     }
@@ -388,4 +418,4 @@ client.on('voiceStateUpdate', async (oldState, newState) => {
 });
 
 // ------------------ LOGIN ------------------
-client.login(TOKEN);    
+client.login(TOKEN);
