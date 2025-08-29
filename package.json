@@ -4,8 +4,9 @@
   "type": "module",
   "main": "index.js",
   "scripts": {
-    "start": "node index.js",
-    "deploy": "node deploy-commands.js"
+    "start": "node src/index.js",
+    "dev": "node src/index.js",
+    "deploy:commands": "node src/deploy-commands.js"
   },
   "dependencies": {
     "discord.js": "^14.15.3",

@@ -1,11 +1,21 @@
-# Node
-node_modules
-npm-debug.log*
-yarn.lock
-pnpm-lock.yaml
+# Dependencies
+node_modules/
 
-# Env
+# Local env
 .env
-.env.*
-.env
-.env
+.env.local
+.env.*.local
+
+# System junk
+.DS_Store
+Thumbs.db
+NUL
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Build/output (if you add dist/ later)
+dist/
