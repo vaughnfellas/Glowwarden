@@ -28,7 +28,7 @@ export async function sendInviteToUser(user, invite, uses) {
       `Here are your guest passes for **#spore-box** (valid 24h, **${uses}** uses):`,
       invite.url,
       '',
-      '_Need a temp voice channel? Join *Sporehall* and I\'ll conjure one for you._',
+      '_Need a temp voice channel? Join *+ Rent A War Chamber* and I\'ll conjure one for you._',
     ].join('\n'));
     return true;
   } catch {

@@ -1,80 +1,31 @@
-// inside src/services/invite-role-service.js
-import { Events, PermissionFlagsBits } from 'discord.js';
+// ============= src/events/ready.js =============
+import { Events, ActivityType } from 'discord.js';
 import { config } from '../config.js';
+import { sweepTempRooms, initTempVCService } from '../services/temp-vc-service.js';
+import { initInviteRoleService } from '../services/invite-role-service.js';
+import { initSporeBoxService } from '../services/sporebox-service.js'
 
-const cache = new Map(); // guildId -> Map<code, uses>
+export const name = Events.ClientReady;
+export const once = true;
 
-async function refreshGuildInvites(guild) {
-  const invites = await guild.invites.fetch().catch(() => null);
-  const map = new Map();
-  if (invites) for (const i of invites.values()) map.set(i.code, i.uses ?? 0);
-  if (guild.vanityURLCode) {
-    const vanity = await guild.fetchVanityData().catch(() => null);
-    if (vanity?.code) map.set(vanity.code, vanity.uses ?? 0);
-  }
-  cache.set(guild.id, map);
-  return map;
-}
+export async function execute(client) {
+  console.log(`✅ Logged in as ${client.user.tag}`);
 
-function diffUsedInvite(oldMap, newMap) {
-  for (const [code, uses] of newMap.entries()) {
-    const before = oldMap.get(code) ?? 0;
-    if ((uses ?? 0) > before) return code;
-  }
-  for (const code of oldMap.keys()) if (!newMap.has(code)) return code;
-  return null;
-}
-
-async function assignRoleForCode(member, code) {
-  const roleId = config.INVITE_ROLE_MAP[code] || config.INVITE_DEFAULT_ROLE_ID;
-  if (!roleId) return { assigned: false };
-  const role = member.guild.roles.cache.get(roleId);
-  if (!role) return { assigned: false };
-  await member.roles.add(role).catch(() => {});
-  return { assigned: true, roleId };
-}
-
-export async function initInviteRoleService(client) {
-  // 👇 Prime immediately (we are likely already in ClientReady)
-  for (const guild of client.guilds.cache.values()) {
-    await refreshGuildInvites(guild);
-  }
-
-  client.on(Events.InviteCreate, invite => {
-    const g = invite.guild; if (!g) return;
-    const m = cache.get(g.id) ?? new Map();
-    m.set(invite.code, invite.uses ?? 0);
-    cache.set(g.id, m);
+  initInviteRoleService(client);
+  initSporeBoxService(client)
+  // Presence (customize or env-drive below)
+  client.user.setPresence({
+    activities: [{ name: 'the Chamber of Oaths', type: ActivityType.Watching }],
+    status: 'online',
   });
 
-  client.on(Events.InviteDelete, invite => {
-    const g = invite.guild; if (!g) return;
-    const m = cache.get(g.id) ?? new Map();
-    m.delete(invite.code);
-    cache.set(g.id, m);
-  });
+  // Initialize services
+  initTempVCService(client);
 
-  client.on(Events.GuildMemberAdd, async member => {
-    try {
-      const g = member.guild;
-      const me = g.members.me;
-      const canManageGuild = me?.permissions?.has(PermissionFlagsBits.ManageGuild);
+  // Startup sweep
+  await sweepTempRooms();
 
-      const before = cache.get(g.id) ?? (canManageGuild ? await refreshGuildInvites(g) : new Map());
-      const after  = canManageGuild ? await refreshGuildInvites(g) : before;
-      const code   = canManageGuild ? diffUsedInvite(before, after) : null;
-
-      const res = await assignRoleForCode(member, code || '__default__');
-
-      const logId = process.env.LOG_CHANNEL_ID;
-      if (logId) {
-        const ch = g.channels.cache.get(logId);
-        if (ch?.isTextBased()) ch.send(
-          code
-            ? `🧭 ${member} joined via \`${code}\`${res.assigned ? ` → <@&${res.roleId}>` : ''}`
-            : `🧭 ${member} joined (invite unknown)${res.assigned ? ` → default <@&${res.roleId}>` : ''}`
-        ).catch(() => {});
-      }
-    } catch {}
-  });
+  // Schedule periodic sweeps (with a safe default)
+  const sweepMs = Math.max(60_000, Number(config.SWEEP_INTERVAL_SEC) * 1000 || 600_000);
+  setInterval(sweepTempRooms, sweepMs);
 }
