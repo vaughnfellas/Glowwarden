@@ -1,6 +1,7 @@
 // ============= src/events/interaction-buttons.js =============
 import { Events, ActionRowBuilder, ButtonBuilder, ButtonStyle, MessageFlags } from 'discord.js';
 import { config } from '../config.js';
+import { sendOathCompletionDM } from '../services/oath-completion-service.js';
 
 const id = v => v && /^\d+$/.test(String(v)) ? String(v) : null;
 
@@ -22,7 +23,7 @@ const roles = () => ({
 
 function sceneText({ userMention, tier, flavor }) {
   const lines = [];
-  lines.push(`📜 **Narrator:** Attendants guide ${userMention} through a hidden door of living bark. Candles stir; the spore-song hums.`);
+  lines.push(`🔜 **Narrator:** Attendants guide ${userMention} through a hidden door of living bark. Candles stir; the spore-song hums.`);
 
   if (tier === 'mem' && flavor === 'lgbt') {
     lines.push('A chamber draped in rainbow moss welcomes you. Mushroom-folk pour shimmering spore-tea as fragrant smoke curls through the air. Saint Fungus and Geebus drift by with warm smiles. ☕');
@@ -105,13 +106,13 @@ export async function execute(interaction) {
         ? `🍄🍄 **YOU MUST GO TO <#${config.SPOREHALL_CHANNEL_ID}>** 🍄🍄
 🌿 Welcome, Stray Spore.
 
-Please wait patiently – your host will come to pluck you from <#${config.SPOREHALL_CHANNEL_ID}>.
+Please wait patiently — your host will come to pluck you from <#${config.SPOREHALL_CHANNEL_ID}>.
 If you find your roots itch with impatience, you may also call upon **/vc** inside the hall
 and choose your host to be guided straight to their War Chamber.
 
 🌙 Until then, remain still and mindful. Your journey will begin soon.
 
-🌿 The roots of the Empire welcome you – be still, and you will be guided.
+🌿 The roots of the Empire welcome you — be still, and you will be guided.
 (you can click <#${config.SPOREHALL_CHANNEL_ID}> in any message to jump there)`
         : '';
 
@@ -151,6 +152,9 @@ and choose your host to be guided straight to their War Chamber.
           if (r && member.roles.cache.has(r)) await member.roles.remove(r).catch(() => {});
         }
       }
+
+      // Send welcome DM
+      await sendOathCompletionDM(member, tier, flavor);
 
       const welcomes = {
         'mem:lgbt': `**Welcome to the Holy Gehy Empire, Mycelioglitter, ${member}!**`,
