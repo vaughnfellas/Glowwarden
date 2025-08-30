@@ -12,7 +12,6 @@ export async function execute(client) {
   console.log(`✅ Logged in as ${client.user.tag}`);
 
   initInviteRoleService(client);
-  initSporeBoxService(client)
   // Presence (customize or env-drive below)
   client.user.setPresence({
     activities: [{ name: 'the Chamber of Oaths', type: ActivityType.Watching }],
