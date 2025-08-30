@@ -139,8 +139,8 @@ export function initSporeBoxService(client) {
         return ix.reply({ ephemeral: true, content: '✨ A host has been pinged. Someone will greet you shortly!' });
       }
     } catch (e) {
-      if (!ix.replied && !ix.deferred) ix.reply({ ephemeral: true, content: '⚠️ Something went wrong.' }).catch(() => {});
-    }
+      
+    if (!ix.replied && !ix.deferred) ix.reply({ ephemeral: true, content: '⚠️ Something went wrong.' }).catch(() => {});}
   });
 
   // Welcome new guests (who don't already have a base tier)
