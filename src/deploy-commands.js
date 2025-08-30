@@ -33,7 +33,7 @@ const straysCmd = new SlashCommandBuilder()
 
 const vcCmd = new SlashCommandBuilder()
   .setName('vc')
-  .setDescription('Move yourself to your host's War Chamber')
+  .setDescription('Move yourself to your host\'s War Chamber')
   .addStringOption(o =>
     o.setName('host')
       .setDescription('Pick your host (current War Chamber owner)')
