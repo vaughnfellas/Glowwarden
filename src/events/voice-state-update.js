@@ -1,9 +1,10 @@
 // ============= src/events/voice-state-update.js =============
 import { config } from '../config.js';
 import { createTempVCFor, scheduleDeleteIfEmpty, tempOwners } from '../services/temp-vc-service.js';
+import { Events } from 'discord.js';
 
-export const name = 'voiceStateUpdate';
 
+export const name = Events.VoiceStateUpdate;
 export async function execute(oldState, newState) {
   // Join-to-create trigger
   if (!oldState.channelId && newState.channelId === config.LOBBY_VC_ID) {

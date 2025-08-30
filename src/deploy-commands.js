@@ -1,5 +1,6 @@
 import 'dotenv/config';
 import { REST, Routes, SlashCommandBuilder } from 'discord.js';
+import { data as decreeData } from './commands/decree.js';
 
 const straysCmd = new SlashCommandBuilder()
   .setName('strays')
@@ -21,7 +22,7 @@ const vcCmd = new SlashCommandBuilder()
       .setRequired(true)
   );
 
-const commands = [straysCmd, vcCmd].map(c => c.toJSON());
+const commands = [straysCmd, vcCmd, decreeData].map(c => c.toJSON());
 
 const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_TOKEN);
 
