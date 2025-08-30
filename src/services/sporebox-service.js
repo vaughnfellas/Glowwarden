@@ -126,7 +126,7 @@ export function initSporeBoxService(client) {
       if (ix.customId?.startsWith('sporebox:host:')) {
         const [, , userId] = ix.customId.split(':');
         if (userId !== ix.user.id) {
-          return ix.reply({ ephemeral: true, content: 'This button isn't for you.' });
+          return ix.reply({ ephemeral: true, content: 'This button is not for you.' });
         }
 
         const ch = ix.guild.channels.cache.get(CFG.sporeBoxId);
