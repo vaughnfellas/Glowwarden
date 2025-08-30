@@ -2,6 +2,7 @@
 import 'dotenv/config';
 import { REST, Routes, SlashCommandBuilder } from 'discord.js';
 import { data as decreeData } from './commands/decree.js';
+import { data as idsData } from './commands/ids.js';
 
 // Helper: basic snowflake validator (17–20 digit ID)
 const SNOWFLAKE = v => /^\d{17,20}$/.test(String(v || '').trim());
@@ -32,7 +33,7 @@ const straysCmd = new SlashCommandBuilder()
 
 const vcCmd = new SlashCommandBuilder()
   .setName('vc')
-  .setDescription('Move yourself to your host’s War Chamber')
+  .setDescription('Move yourself to your host's War Chamber')
   .addStringOption(o =>
     o.setName('host')
       .setDescription('Pick your host (current War Chamber owner)')
@@ -40,9 +41,8 @@ const vcCmd = new SlashCommandBuilder()
       .setRequired(true)
   );
 
-// If decreeData is a SlashCommandBuilder (export const data = new SlashCommandBuilder()),
-// it already has .toJSON().
-const commands = [straysCmd, vcCmd, decreeData].map(c => c.toJSON());
+// Include ALL commands in the deployment
+const commands = [straysCmd, vcCmd, decreeData, idsData].map(c => c.toJSON());
 
 // --- REST client ---
 const rest = new REST({ version: '10' }).setToken(TOKEN);
