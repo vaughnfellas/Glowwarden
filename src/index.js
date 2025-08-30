@@ -5,6 +5,8 @@ import { startHealthServer } from './health-server.js';
 import { loadCommands } from './commands/index.js';
 import { loadEvents } from './events/index.js';
 import { config } from './config.js';
+import { initInviteRoleService } from './services/invite-role-service.js';
+import { initSporeBoxService } from './services/sporebox-service.js';
 
 // Start health server
 startHealthServer();
@@ -14,6 +16,7 @@ const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
     GatewayIntentBits.GuildVoiceStates,
+    GatewayIntentBits.GuildMembers,
   ],
 });
 
@@ -21,5 +24,9 @@ const client = new Client({
 loadCommands(client);
 loadEvents(client);
 
+// Initialize services before login
+initInviteRoleService(client);
+initSporeBoxService(client);
+
 // Login
-client.login(config.TOKEN);
+client.login(config.DISCORD_TOKEN);
