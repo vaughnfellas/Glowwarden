@@ -6,7 +6,7 @@ import * as interactionButtonsEvent from '../commands/interaction-buttons.js';
 const events = [
   readyEvent,
   voiceStateUpdateEvent,
-  interactionButtonsEvent,       // 👈 include in the array
+  interactionButtonsEvent,       
 ];
 
 export function loadEvents(client) {

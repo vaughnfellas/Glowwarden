@@ -1,4 +1,3 @@
-// inside src/services/invite-role-service.js
 import { Events, PermissionFlagsBits } from 'discord.js';
 import { config } from '../config.js';
 
@@ -7,7 +6,10 @@ const cache = new Map(); // guildId -> Map<code, uses>
 async function refreshGuildInvites(guild) {
   const invites = await guild.invites.fetch().catch(() => null);
   const map = new Map();
-  if (invites) for (const i of invites.values()) map.set(i.code, i.uses ?? 0);
+  if (invites) {
+    for (const i of invites.values()) map.set(i.code, i.uses ?? 0);
+  }
+  // vanity URL optional; remove this block if you don’t use a vanity
   if (guild.vanityURLCode) {
     const vanity = await guild.fetchVanityData().catch(() => null);
     if (vanity?.code) map.set(vanity.code, vanity.uses ?? 0);
@@ -19,9 +21,11 @@ async function refreshGuildInvites(guild) {
 function diffUsedInvite(oldMap, newMap) {
   for (const [code, uses] of newMap.entries()) {
     const before = oldMap.get(code) ?? 0;
-    if ((uses ?? 0) > before) return code;
+    if ((uses ?? 0) > before) return code;           // uses increased
   }
-  for (const code of oldMap.keys()) if (!newMap.has(code)) return code;
+  for (const code of oldMap.keys()) {
+    if (!newMap.has(code)) return code;              // single-use disappeared
+  }
   return null;
 }
 
@@ -34,35 +38,34 @@ async function assignRoleForCode(member, code) {
   return { assigned: true, roleId };
 }
 
-export async function initInviteRoleService(client) {
-  // 👇 Prime immediately (we are likely already in ClientReady)
-  for (const guild of client.guilds.cache.values()) {
-    await refreshGuildInvites(guild);
-  }
+export function initInviteRoleService(client) {
+  client.on(Events.ClientReady, async () => {
+    for (const guild of client.guilds.cache.values()) await refreshGuildInvites(guild);
+  });
 
-  client.on(Events.InviteCreate, invite => {
+  client.on(Events.InviteCreate, (invite) => {
     const g = invite.guild; if (!g) return;
     const m = cache.get(g.id) ?? new Map();
     m.set(invite.code, invite.uses ?? 0);
     cache.set(g.id, m);
   });
 
-  client.on(Events.InviteDelete, invite => {
+  client.on(Events.InviteDelete, (invite) => {
     const g = invite.guild; if (!g) return;
     const m = cache.get(g.id) ?? new Map();
     m.delete(invite.code);
     cache.set(g.id, m);
   });
 
-  client.on(Events.GuildMemberAdd, async member => {
+  client.on(Events.GuildMemberAdd, async (member) => {
     try {
       const g = member.guild;
       const me = g.members.me;
       const canManageGuild = me?.permissions?.has(PermissionFlagsBits.ManageGuild);
 
       const before = cache.get(g.id) ?? (canManageGuild ? await refreshGuildInvites(g) : new Map());
-      const after  = canManageGuild ? await refreshGuildInvites(g) : before;
-      const code   = canManageGuild ? diffUsedInvite(before, after) : null;
+      const after = canManageGuild ? await refreshGuildInvites(g) : before;
+      const code = canManageGuild ? diffUsedInvite(before, after) : null;
 
       const res = await assignRoleForCode(member, code || '__default__');
 
@@ -71,10 +74,12 @@ export async function initInviteRoleService(client) {
         const ch = g.channels.cache.get(logId);
         if (ch?.isTextBased()) ch.send(
           code
-            ? `🧭 ${member} joined via \`${code}\`${res.assigned ? ` → <@&${res.roleId}>` : ''}`
+            ? `🧭 ${member} joined via \`${code}\`${res.assigned ? ` → role <@&${res.roleId}>` : ''}`
             : `🧭 ${member} joined (invite unknown)${res.assigned ? ` → default <@&${res.roleId}>` : ''}`
         ).catch(() => {});
       }
-    } catch {}
+    } catch (e) {
+      console.warn('invite-role service error:', e?.message);
+    }
   });
 }

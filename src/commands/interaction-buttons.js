@@ -1,20 +1,22 @@
+// ============= src/events/interaction-buttons.js =============
 import { Events, ActionRowBuilder, ButtonBuilder, ButtonStyle } from 'discord.js';
+import { config } from '../config.js';
 
 const id = v => v && /^\d+$/.test(String(v)) ? String(v) : null;
 
 const roles = () => ({
-  flairL: id(process.env.ROLE_LGBTQ),
-  flairA: id(process.env.ROLE_ALLY),
-  baseMem: id(process.env.ROLE_BASE_MEMBER),
-  baseOff: id(process.env.ROLE_BASE_OFFICER),
-  baseVet: id(process.env.ROLE_BASE_VETERAN),
+  flairL: id(config.ROLE_LGBTQ),
+  flairA: id(config.ROLE_ALLY),
+  baseMem: id(config.ROLE_BASE_MEMBER),
+  baseOff: id(config.ROLE_BASE_OFFICER),
+  baseVet: id(config.ROLE_BASE_VETERAN),
   final: {
-    'mem:lgbt': id(process.env.ROLE_FINAL_MYCE),
-    'mem:ally': id(process.env.ROLE_FINAL_GALLIES),
-    'off:lgbt': id(process.env.ROLE_FINAL_GCRUS),
-    'off:ally': id(process.env.ROLE_FINAL_BBEAR),
-    'vet:lgbt': id(process.env.ROLE_FINAL_RAPO),
-    'vet:ally': id(process.env.ROLE_FINAL_RALLYLT),
+    'mem:lgbt': id(config.ROLE_FINAL_MYCE),
+    'mem:ally': id(config.ROLE_FINAL_GALLIES),
+    'off:lgbt': id(config.ROLE_FINAL_GCRUS),
+    'off:ally': id(config.ROLE_FINAL_BBEAR),
+    'vet:lgbt': id(config.ROLE_FINAL_RAPO),
+    'vet:ally': id(config.ROLE_FINAL_RALLYLT),
   },
 });
 
@@ -55,7 +57,7 @@ export async function execute(interaction) {
     if (!interaction.isButton()) return;
 
     // Guard: wrong channel -> ephemeral reply (avoid timeouts)
-    if (interaction.channelId !== String(process.env.DECREE_CHANNEL_ID)) {
+    if (interaction.channelId !== String(config.DECREE_CHANNEL_ID)) {
       return interaction.reply({ ephemeral: true, content: 'Please use the decree in the Chamber of Oaths.' });
     }
 
@@ -64,7 +66,7 @@ export async function execute(interaction) {
       const { flairL, flairA, baseMem, baseOff, baseVet } = roles();
       const member = await interaction.guild.members.fetch(interaction.user.id);
 
-      // 🔒 Flair lock — if user already has 🌈 or 🤝, don’t let them re-sign
+      // 🔒 Flair lock — if user already has 🌈 or 🤝, don't let them re-sign
       if ((flairL && member.roles.cache.has(flairL)) || (flairA && member.roles.cache.has(flairA))) {
         return interaction.reply({
           ephemeral: true,
@@ -76,10 +78,26 @@ export async function execute(interaction) {
       const flairId = flavor === 'lgbt' ? flairL : flairA;
       if (flairId) await member.roles.add(flairId).catch(() => {});
 
+      // Add Stray Spore role
+      if (config.STRAY_SPORE_ROLE_ID) {
+        await member.roles.add(config.STRAY_SPORE_ROLE_ID).catch(() => {});
+      }
+
       const tier =
         (baseVet && member.roles.cache.has(baseVet)) ? 'vet' :
         (baseOff && member.roles.cache.has(baseOff)) ? 'off' :
         'mem';
+
+      // Create go-to-sporehall message
+      const goText = config.SPOREHALL_CHANNEL_ID ? 
+        `🍄🍄 **YOU MUST GO TO <#${config.SPOREHALL_CHANNEL_ID}>** 🍄🍄\n` +
+        `🌿 Welcome, Stray Spore.\n\n` +
+        `Please wait patiently — your host will come to pluck you from <#${config.SPOREHALL_CHANNEL_ID}>.\n` +
+        `If you find your roots itch with impatience, you may also call upon **/vc** inside the hall\n` +
+        `and choose your host to be guided straight to their War Chamber.\n\n` +
+        `🌙 Until then, remain still and mindful. Your journey will begin soon.\n\n` +
+        `🌿 The roots of the Empire welcome you — be still, and you will be guided.\n` +
+        `(you can click <#${config.SPOREHALL_CHANNEL_ID}> in any message to jump there)` : '';
 
       const row = new ActionRowBuilder().addComponents(
         new ButtonBuilder()
@@ -89,7 +107,7 @@ export async function execute(interaction) {
       );
 
       return interaction.reply({
-        content: sceneText({ userMention: member.toString(), tier, flavor }),
+        content: sceneText({ userMention: member.toString(), tier, flavor }) + (goText ? `\n\n${goText}` : ''),
         components: [row],
         ephemeral: true,
       });
@@ -112,7 +130,7 @@ export async function execute(interaction) {
       }
 
       await member.roles.add(finalRole).catch(() => {});
-      if (String(process.env.CEREMONY_REMOVE_BASE_ON_FINAL).toLowerCase() === 'true') {
+      if (String(config.CEREMONY_REMOVE_BASE_ON_FINAL).toLowerCase() === 'true') {
         for (const r of [baseMem, baseOff, baseVet]) {
           if (r && member.roles.cache.has(r)) await member.roles.remove(r).catch(() => {});
         }

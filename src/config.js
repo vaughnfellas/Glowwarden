@@ -1,3 +1,19 @@
+function parseInviteRoleMap(s) {
+  const map = {};
+  if (!s) return map;
+  for (const pair of s.split(',').map(x => x.trim()).filter(Boolean)) {
+    const [code, role] = pair.split(':').map(x => x.trim());
+    if (code && /^\d{17,20}$/.test(role)) map[code] = role;
+  }
+  return map;
+}
+
+export const config = {
+  // ...existing config...
+  INVITE_ROLE_MAP: parseInviteRoleMap(process.env.INVITE_ROLE_MAP),
+  INVITE_DEFAULT_ROLE_ID: process.env.INVITE_DEFAULT_ROLE_ID || '',
+};
+
 export const config = {
     // Bot
     TOKEN: process.env.DISCORD_TOKEN,
