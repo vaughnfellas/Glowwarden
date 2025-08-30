@@ -1,5 +1,5 @@
 // ============= src/events/interaction-buttons.js =============
-import { Events, ActionRowBuilder, ButtonBuilder, ButtonStyle } from 'discord.js';
+import { Events, ActionRowBuilder, ButtonBuilder, ButtonStyle, MessageFlags } from 'discord.js';
 import { config } from '../config.js';
 
 const id = v => v && /^\d+$/.test(String(v)) ? String(v) : null;
@@ -56,31 +56,44 @@ export async function execute(interaction) {
   try {
     if (!interaction.isButton()) return;
 
-    // Guard: wrong channel -> ephemeral reply (avoid timeouts)
-    if (interaction.channelId !== String(config.DECREE_CHANNEL_ID)) {
-      return interaction.reply({ ephemeral: true, content: 'Please use the decree in the Chamber of Oaths.' });
+    // These are the only buttons we handle here
+    const isFlair = interaction.customId === 'flair:lgbt' || interaction.customId === 'flair:ally';
+    const isOath  = interaction.customId.startsWith('oath:accept:');
+    if (!isFlair && !isOath) return;
+
+    // Allow clicks in either Chamber of Oaths OR Spore Box
+    const allowed = new Set(
+      [config.DECREE_CHANNEL_ID, config.SPORE_BOX_CHANNEL_ID].filter(Boolean).map(String)
+    );
+    if (!allowed.has(interaction.channelId)) {
+      return interaction.reply({
+        content: 'Please use the decree in the Chamber of Oaths or the pinned decree in Spore Box.',
+        flags: MessageFlags.Ephemeral,
+      });
     }
 
     // Flair selection
-    if (interaction.customId === 'flair:lgbt' || interaction.customId === 'flair:ally') {
+    if (isFlair) {
       const { flairL, flairA, baseMem, baseOff, baseVet } = roles();
       const member = await interaction.guild.members.fetch(interaction.user.id);
 
-      // 🔒 Flair lock — if user already has 🌈 or 🤝, don't let them re-sign
+      // 🔒 already signed? (has either flair) -> stop
       if ((flairL && member.roles.cache.has(flairL)) || (flairA && member.roles.cache.has(flairA))) {
         return interaction.reply({
-          ephemeral: true,
           content: 'You already carry a flair (🌈 or 🤝). If you need it changed, ping a Steward.',
+          flags: MessageFlags.Ephemeral,
         });
       }
 
       const flavor = interaction.customId.endsWith('lgbt') ? 'lgbt' : 'ally';
       const flairId = flavor === 'lgbt' ? flairL : flairA;
-      if (flairId) await member.roles.add(flairId).catch(() => {});
 
-      // Add Stray Spore role
+      // Add flair role
+      if (flairId) await member.roles.add(flairId).catch(console.error);
+
+      // Add Stray Spore role (if configured)
       if (config.STRAY_SPORE_ROLE_ID) {
-        await member.roles.add(config.STRAY_SPORE_ROLE_ID).catch(() => {});
+        await member.roles.add(config.STRAY_SPORE_ROLE_ID).catch(console.error);
       }
 
       const tier =
@@ -88,16 +101,19 @@ export async function execute(interaction) {
         (baseOff && member.roles.cache.has(baseOff)) ? 'off' :
         'mem';
 
-      // Create go-to-sporehall message
-      const goText = config.SPOREHALL_CHANNEL_ID ? 
-        `🍄🍄 **YOU MUST GO TO <#${config.SPOREHALL_CHANNEL_ID}>** 🍄🍄\n` +
-        `🌿 Welcome, Stray Spore.\n\n` +
-        `Please wait patiently — your host will come to pluck you from <#${config.SPOREHALL_CHANNEL_ID}>.\n` +
-        `If you find your roots itch with impatience, you may also call upon **/vc** inside the hall\n` +
-        `and choose your host to be guided straight to their War Chamber.\n\n` +
-        `🌙 Until then, remain still and mindful. Your journey will begin soon.\n\n` +
-        `🌿 The roots of the Empire welcome you — be still, and you will be guided.\n` +
-        `(you can click <#${config.SPOREHALL_CHANNEL_ID}> in any message to jump there)` : '';
+      const goText = config.SPOREHALL_CHANNEL_ID
+        ? `🍄🍄 **YOU MUST GO TO <#${config.SPOREHALL_CHANNEL_ID}>** 🍄🍄
+🌿 Welcome, Stray Spore.
+
+Please wait patiently – your host will come to pluck you from <#${config.SPOREHALL_CHANNEL_ID}>.
+If you find your roots itch with impatience, you may also call upon **/vc** inside the hall
+and choose your host to be guided straight to their War Chamber.
+
+🌙 Until then, remain still and mindful. Your journey will begin soon.
+
+🌿 The roots of the Empire welcome you – be still, and you will be guided.
+(you can click <#${config.SPOREHALL_CHANNEL_ID}> in any message to jump there)`
+        : '';
 
       const row = new ActionRowBuilder().addComponents(
         new ButtonBuilder()
@@ -109,15 +125,15 @@ export async function execute(interaction) {
       return interaction.reply({
         content: sceneText({ userMention: member.toString(), tier, flavor }) + (goText ? `\n\n${goText}` : ''),
         components: [row],
-        ephemeral: true,
+        flags: MessageFlags.Ephemeral,
       });
     }
 
     // Oath acceptance
-    if (interaction.customId.startsWith('oath:accept:')) {
+    if (isOath) {
       const [, , userId, tier, flavor] = interaction.customId.split(':');
       if (userId !== interaction.user.id) {
-        return interaction.reply({ ephemeral: true, content: 'This oath is not yours.' });
+        return interaction.reply({ content: 'This oath is not yours.', flags: MessageFlags.Ephemeral });
       }
 
       const { baseMem, baseOff, baseVet, final } = roles();
@@ -126,7 +142,7 @@ export async function execute(interaction) {
       const key = `${tier}:${flavor}`;
       const finalRole = final[key];
       if (!finalRole) {
-        return interaction.reply({ ephemeral: true, content: 'I could not determine your mantle. Ask a Steward.' });
+        return interaction.reply({ content: 'I could not determine your mantle. Ask a Steward.', flags: MessageFlags.Ephemeral });
       }
 
       await member.roles.add(finalRole).catch(() => {});
@@ -153,7 +169,7 @@ export async function execute(interaction) {
   } catch (err) {
     console.error('interaction error:', err);
     if (!interaction.replied && !interaction.deferred) {
-      await interaction.reply({ ephemeral: true, content: '⚠️ Something went wrong with this interaction.' }).catch(() => {});
+      await interaction.reply({ content: '⚠️ Something went wrong with this interaction.', flags: MessageFlags.Ephemeral }).catch(() => {});
     }
   }
 }

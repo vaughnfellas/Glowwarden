@@ -1,5 +1,5 @@
 // ============= src/commands/strays.js =============
-import { SlashCommandBuilder } from 'discord.js';
+import { SlashCommandBuilder, MessageFlags } from 'discord.js';
 import { config } from '../config.js';
 import { createSporeBoxInvite, sendInviteToUser, logInviteCreation } from '../services/invite-service.js';
 
@@ -17,7 +17,7 @@ export async function execute(interaction) {
   console.log('↪ /strays received from', interaction.user.tag);
 
   try {
-    await interaction.deferReply({ flags: 64 });
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
   } catch {}
 
   const requested = interaction.options.getInteger('count') ?? config.DEFAULT_USES;
@@ -50,7 +50,7 @@ export async function execute(interaction) {
   } catch (err) {
     console.error('Invite error:', err);
     try {
-      await interaction.editReply(`❌ ${err.message || 'Could not create invite (check bot perms).'}`);
+      await interaction.editReply(`⛔ ${err.message || 'Could not create invite (check bot perms).'}`);
     } catch {}
   }
 }

@@ -1,5 +1,5 @@
 // ============= src/commands/vc.js =============
-import { SlashCommandBuilder, ChannelType } from 'discord.js';
+import { SlashCommandBuilder, ChannelType, MessageFlags } from 'discord.js';
 import { config } from '../config.js';
 import { tempOwners } from '../services/temp-vc-service.js';
 
@@ -19,35 +19,35 @@ export async function execute(interaction) {
 
   const vs = member.voice;
   if (!vs?.channelId) {
-    await interaction.reply({ content: '❌ Join *Sporehall* first, then use /vc.', flags: 64 });
+    await interaction.reply({ content: '⛔ Join *Sporehall* first, then use /vc.', flags: MessageFlags.Ephemeral });
     return;
   }
   if (config.LOBBY_VC_ID && vs.channelId !== config.LOBBY_VC_ID) {
-    await interaction.reply({ content: '⚠️ Please join *Sporehall* first, then use /vc.', flags: 64 });
+    await interaction.reply({ content: '⚠️ Please join *Sporehall* first, then use /vc.', flags: MessageFlags.Ephemeral });
     return;
   }
 
   const entry = [...tempOwners.entries()].find(([, owner]) => owner === hostId);
   if (!entry) {
-    await interaction.reply({ content: '❌ I can\'t find a War Chamber for that host right now.', flags: 64 });
+    await interaction.reply({ content: '⛔ I can\'t find a War Chamber for that host right now.', flags: MessageFlags.Ephemeral });
     return;
   }
 
   const [chamberId] = entry;
   const chamber = await interaction.guild.channels.fetch(chamberId).catch(() => null);
   if (!chamber || chamber.type !== ChannelType.GuildVoice) {
-    await interaction.reply({ content: '❌ That War Chamber doesn\'t seem to exist anymore.', flags: 64 });
+    await interaction.reply({ content: '⛔ That War Chamber doesn\'t seem to exist anymore.', flags: MessageFlags.Ephemeral });
     return;
   }
 
   try {
     await member.voice.setChannel(chamber);
-    await interaction.reply({ content: `✅ Moved you to **${chamber.name}**.`, flags: 64 });
+    await interaction.reply({ content: `✅ Moved you to **${chamber.name}**.`, flags: MessageFlags.Ephemeral });
   } catch (e) {
     console.error('vc move failed:', e);
     await interaction.reply({
-      content: '❌ I couldn\'t move you. I need *Move Members* in both channels.',
-      flags: 64,
+      content: '⛔ I couldn\'t move you. I need *Move Members* in both channels.',
+      flags: MessageFlags.Ephemeral,
     });
   }
 }

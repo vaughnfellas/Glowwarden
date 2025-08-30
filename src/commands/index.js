@@ -1,17 +1,17 @@
 // ============= src/commands/index.js =============
 import * as straysCommand from './strays.js';
 import * as vcCommand from './vc.js';
-import * as decreeCommand from './decree.js';   // 👈 add this
-import { Events } from 'discord.js';
+import * as decreeCommand from './decree.js';
+import { Events, MessageFlags } from 'discord.js';
 
 const commands = new Map([
   [straysCommand.data.name, straysCommand],
   [vcCommand.data.name, vcCommand],
-  [decreeCommand.data.name, decreeCommand],     // 👈 include here
+  [decreeCommand.data.name, decreeCommand],
 ]);
 
 export function loadCommands(client) {
-  client.on(Events.InteractionCreate, async (interaction) =>{
+  client.on(Events.InteractionCreate, async (interaction) => {
     if (interaction.isChatInputCommand()) {
       const command = commands.get(interaction.commandName);
       if (command) {
@@ -20,7 +20,10 @@ export function loadCommands(client) {
         } catch (err) {
           console.error(`Error executing /${interaction.commandName}:`, err);
           if (!interaction.replied) {
-            await interaction.reply({ content: '⚠️ Something went wrong.', ephemeral: true }).catch(() => {});
+            await interaction.reply({ 
+              content: '⚠️ Something went wrong.', 
+              flags: MessageFlags.Ephemeral 
+            }).catch(() => {});
           }
         }
       }

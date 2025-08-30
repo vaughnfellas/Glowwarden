@@ -1,5 +1,5 @@
 // ============= src/services/sporebox-service.js =============
-import { Events, ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder } from 'discord.js';
+import { Events, ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder, MessageFlags } from 'discord.js';
 
 // Read needed envs once
 const CFG = {
@@ -77,7 +77,7 @@ export function initSporeBoxService(client) {
       // Handle visitor flair buttons
       if (ix.customId === 'visitor:flair:lgbt' || ix.customId === 'visitor:flair:ally') {
         if (ix.channelId !== CFG.sporeBoxId) {
-          return ix.reply({ ephemeral: true, content: 'Please use the visitor decree in Spore Box.' });
+          return ix.reply({ content: 'Please use the visitor decree in Spore Box.', flags: MessageFlags.Ephemeral });
         }
 
         const member = await ix.guild.members.fetch(ix.user.id);
@@ -89,8 +89,8 @@ export function initSporeBoxService(client) {
         
         if (hasLgbt || hasAlly) {
           return ix.reply({
-            ephemeral: true,
             content: 'You already carry a flair. If you need it changed, ping a Steward.',
+            flags: MessageFlags.Ephemeral,
           });
         }
 
@@ -111,7 +111,6 @@ export function initSporeBoxService(client) {
         const flairName = flavor === 'lgbt' ? 'LGBTQIA2S+' : 'Ally';
         
         return ix.reply({
-          ephemeral: true,
           content: [
             `✅ **Decree signed as ${flairName}!**`,
             `🌿 You are now a Stray Spore.`,
@@ -119,6 +118,7 @@ export function initSporeBoxService(client) {
             `**Next step:** Go to ${hall} and wait for your host.`,
             `You can use **/vc** there to join your host's War Chamber directly.`,
           ].join('\n'),
+          flags: MessageFlags.Ephemeral,
         });
       }
 
@@ -126,21 +126,21 @@ export function initSporeBoxService(client) {
       if (ix.customId?.startsWith('sporebox:host:')) {
         const [, , userId] = ix.customId.split(':');
         if (userId !== ix.user.id) {
-          return ix.reply({ ephemeral: true, content: 'This button is not for you.' });
+          return ix.reply({ content: 'This button is not for you.', flags: MessageFlags.Ephemeral });
         }
 
         const ch = ix.guild.channels.cache.get(CFG.sporeBoxId);
         if (!ch?.isTextBased()) {
-          return ix.reply({ ephemeral: true, content: 'Host line is unavailable right now.' });
+          return ix.reply({ content: 'Host line is unavailable right now.', flags: MessageFlags.Ephemeral });
         }
 
         const mention = CFG.hostRoleId ? `<@&${CFG.hostRoleId}>` : '@here';
         await ch.send(`${mention} ${ix.user} is ready for onboarding in Spore Box.`).catch(() => {});
-        return ix.reply({ ephemeral: true, content: '✨ A host has been pinged. Someone will greet you shortly!' });
+        return ix.reply({ content: '✨ A host has been pinged. Someone will greet you shortly!', flags: MessageFlags.Ephemeral });
       }
     } catch (e) {
-      
-    if (!ix.replied && !ix.deferred) ix.reply({ ephemeral: true, content: '⚠️ Something went wrong.' }).catch(() => {});}
+      if (!ix.replied && !ix.deferred) ix.reply({ content: '⚠️ Something went wrong.', flags: MessageFlags.Ephemeral }).catch(() => {});
+    }
   });
 
   // Welcome new guests (who don't already have a base tier)
