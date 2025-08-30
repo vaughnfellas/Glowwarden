@@ -2,6 +2,7 @@
 import * as straysCommand from './strays.js';
 import * as vcCommand from './vc.js';
 import * as decreeCommand from './decree.js';   // 👈 add this
+import { Events } from 'discord.js';
 
 const commands = new Map([
   [straysCommand.data.name, straysCommand],
@@ -10,7 +11,7 @@ const commands = new Map([
 ]);
 
 export function loadCommands(client) {
-  client.on('interactionCreate', async (interaction) => {
+  client.on(Events.InteractionCreate, async (interaction) =>{
     if (interaction.isChatInputCommand()) {
       const command = commands.get(interaction.commandName);
       if (command) {
