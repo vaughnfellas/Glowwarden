@@ -1,6 +1,7 @@
 // ============= src/commands/vc.js =============
 import { SlashCommandBuilder, ChannelType, MessageFlags } from 'discord.js';
 import { config } from '../config.js';
+import { CHANNELS } from '../channels.js';
 import { tempOwners } from '../services/temp-vc-service.js';
 
 export const data = new SlashCommandBuilder()
@@ -22,7 +23,7 @@ export async function execute(interaction) {
     await interaction.reply({ content: '⛔ Join *Sporehall* first, then use /vc.', flags: MessageFlags.Ephemeral });
     return;
   }
-  if (config.LOBBY_VC_ID && vs.channelId !== config.LOBBY_VC_ID) {
+  if (CHANNELS.SPOREHALL && vs.channelId !== CHANNELS.SPOREHALL) {
     await interaction.reply({ content: '⚠️ Please join *Sporehall* first, then use /vc.', flags: MessageFlags.Ephemeral });
     return;
   }

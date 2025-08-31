@@ -1,6 +1,6 @@
 // ============= src/services/oath-completion-service.js =============
 import { EmbedBuilder } from 'discord.js';
-import { config } from '../config.js';
+import { CHANNELS } from '../channels.js';
 
 function getTierInfo(tier, flavor) {
   const info = {
@@ -45,7 +45,7 @@ function getTierInfo(tier, flavor) {
 
 function createWelcomeDM(member, tier, flavor) {
   const { title, description, color } = getTierInfo(tier, flavor);
-  const sporehallMention = config.SPOREHALL_CHANNEL_ID ? `<#${config.SPOREHALL_CHANNEL_ID}>` : 'Sporehall';
+  const sporehallMention = CHANNELS.SPOREHALL ? `<#${CHANNELS.SPOREHALL}>` : 'Sporehall';
   
   const embed = new EmbedBuilder()
     .setTitle(`Welcome, ${title} ${member.displayName}!`)

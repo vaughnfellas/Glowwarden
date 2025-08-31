@@ -8,6 +8,7 @@ import {
   MessageFlags,
 } from 'discord.js';
 import { checkOwnerPermission } from '../utils/owner.js';
+import { CHANNELS } from '../channels.js';
 
 export const data = new SlashCommandBuilder()
   .setName('decree')
@@ -18,7 +19,7 @@ export async function execute(interaction) {
   // Check if user is owner
   if (!(await checkOwnerPermission(interaction))) return;
 
-  if (interaction.channelId !== String(process.env.DECREE_CHANNEL_ID)) {
+  if (interaction.channelId !== CHANNELS.CHAMBER_OF_OATHS) {
     return interaction.reply({ content: 'Run this in the Chamber of Oaths.', flags: MessageFlags.Ephemeral });
   }
 

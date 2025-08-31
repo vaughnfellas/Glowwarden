@@ -1,5 +1,6 @@
 // ============= src/config.js =============
 import 'dotenv/config';
+import { CHANNELS } from './channels.js';
 
 const toBool = (v, d = false) => {
   if (v === undefined || v === null || v === '') return d;
@@ -28,11 +29,11 @@ export const config = {
   CLIENT_ID: process.env.CLIENT_ID || '',
   GUILD_ID: snowflake(process.env.GUILD_ID),
 
-  // Channels / Health
-  SPORE_BOX_CHANNEL_ID: snowflake(process.env.SPORE_BOX_CHANNEL_ID),
-  DECREE_CHANNEL_ID: snowflake(process.env.DECREE_CHANNEL_ID),
-  LOG_CHANNEL_ID: snowflake(process.env.LOG_CHANNEL_ID),
-  SPOREHALL_CHANNEL_ID: snowflake(process.env.SPOREHALL_CHANNEL_ID),
+  // Channels (migrated to use CHANNELS mapping)
+  SPORE_BOX_CHANNEL_ID: CHANNELS.SPORE_BOX,
+  DECREE_CHANNEL_ID: CHANNELS.CHAMBER_OF_OATHS,
+  LOG_CHANNEL_ID: CHANNELS.HALL_OF_RECORDS,
+  SPOREHALL_CHANNEL_ID: CHANNELS.SPOREHALL,
   PORT: toInt(process.env.PORT, 3000),
 
   // Temp VC / Sweeps

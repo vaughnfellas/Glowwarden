@@ -1,5 +1,6 @@
 // ============= src/events/interaction-buttons.js =============
 import { Events, ActionRowBuilder, ButtonBuilder, ButtonStyle, MessageFlags } from 'discord.js';
+import { CHANNELS } from '../channels.js';
 import { config } from '../config.js';
 import { sendOathCompletionDM } from '../services/oath-completion-service.js';
 
@@ -64,7 +65,7 @@ export async function execute(interaction) {
 
     // Allow clicks in either Chamber of Oaths OR Spore Box
     const allowed = new Set(
-      [config.DECREE_CHANNEL_ID, config.SPORE_BOX_CHANNEL_ID].filter(Boolean).map(String)
+      [CHANNELS.CHAMBER_OF_OATHS, CHANNELS.SPORE_BOX].filter(Boolean).map(String)
     );
     if (!allowed.has(interaction.channelId)) {
       return interaction.reply({
@@ -102,18 +103,18 @@ export async function execute(interaction) {
         (baseOff && member.roles.cache.has(baseOff)) ? 'off' :
         'mem';
 
-      const goText = config.SPOREHALL_CHANNEL_ID
-        ? `🍄🍄 **YOU MUST GO TO <#${config.SPOREHALL_CHANNEL_ID}>** 🍄🍄
+      const goText = CHANNELS.SPOREHALL
+        ? `🍄🍄 **YOU MUST GO TO <#${CHANNELS.SPOREHALL}>** 🍄🍄
 🌿 Welcome, Stray Spore.
 
-Please wait patiently — your host will come to pluck you from <#${config.SPOREHALL_CHANNEL_ID}>.
+Please wait patiently — your host will come to pluck you from <#${CHANNELS.SPOREHALL}>.
 If you find your roots itch with impatience, you may also call upon **/vc** inside the hall
 and choose your host to be guided straight to their War Chamber.
 
 🌙 Until then, remain still and mindful. Your journey will begin soon.
 
 🌿 The roots of the Empire welcome you — be still, and you will be guided.
-(you can click <#${config.SPOREHALL_CHANNEL_ID}> in any message to jump there)`
+(you can click <#${CHANNELS.SPOREHALL}> in any message to jump there)`
         : '';
 
       const row = new ActionRowBuilder().addComponents(

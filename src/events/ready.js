@@ -1,5 +1,6 @@
 // ============= src/events/ready.js =============
 import { Events, ActivityType } from 'discord.js';
+import { CHANNELS } from '../channels.js';
 import { config } from '../config.js';
 import { sweepTempRooms, initTempVCService } from '../services/temp-vc-service.js';
 import { initInviteRoleService } from '../services/invite-role-service.js';
@@ -20,6 +21,7 @@ export async function execute(client) {
 
   // Initialize services
   initTempVCService(client);
+  initSporeBoxService(client);
 
   // Startup sweep
   await sweepTempRooms();

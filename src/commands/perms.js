@@ -4,6 +4,7 @@ import { checkOwnerPermission } from '../utils/owner.js';
 import { config } from '../config.js';
 import fs from 'fs/promises';
 import path from 'path';
+import { CHANNELS } from '../channels.js';
 
 export const data = new SlashCommandBuilder()
   .setName('perms')
@@ -65,8 +66,8 @@ export const data = new SlashCommandBuilder()
 // Default permission structure based on your role setup
 const DEFAULT_PERMISSIONS = {
   channels: {
-    [config.SPORE_BOX_CHANNEL_ID]: {
-      name: 'Spore Box',
+    [CHANNELS.SPORE_BOX]: {
+      name: 'spore-box',
       description: 'Guest landing zone - visitors sign decree here',
       overwrites: [
         {
@@ -88,8 +89,8 @@ const DEFAULT_PERMISSIONS = {
         }
       ]
     },
-    [config.DECREE_CHANNEL_ID]: {
-      name: 'Chamber of Oaths',
+    [CHANNELS.CHAMBER_OF_OATHS]: {
+      name: 'chamber-of-oaths',
       description: 'Members complete final oath here',
       overwrites: [
         {
@@ -114,8 +115,8 @@ const DEFAULT_PERMISSIONS = {
         }
       ]
     },
-    [config.SPOREHALL_CHANNEL_ID]: {
-      name: 'Sporehall',
+    [CHANNELS.SPOREHALL]: {
+      name: 'sporehall',
       description: 'Guests wait here, use /vc to join hosts',
       overwrites: [
         {
@@ -160,8 +161,8 @@ const DEFAULT_PERMISSIONS = {
         }
       ]
     },
-    [config.LOBBY_VC_ID]: {
-      name: 'Rent A War Chamber',
+    [CHANNELS.RENT_A_WAR_CHAMBER]: {
+      name: '➕⚔️-rent-a-war-chamber',
       description: 'Join to create temp VC',
       overwrites: [
         {
@@ -200,8 +201,8 @@ const DEFAULT_PERMISSIONS = {
     }
   },
   categories: {
-    [config.TEMP_VC_CATEGORY_ID]: {
-      name: 'War Chambers',
+    [CHANNELS.BATTLEFRONT]: {
+      name: 'Battlefront',
       description: 'Temporary voice channels',
       overwrites: [
         {

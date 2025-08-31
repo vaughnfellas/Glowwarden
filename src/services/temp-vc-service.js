@@ -1,5 +1,6 @@
 // ============= src/services/temp-vc-service.js =============
 import { ChannelType, PermissionFlagsBits } from 'discord.js';
+import { CHANNELS } from '../channels.js';
 import { config } from '../config.js';
 
 // State tracking
@@ -52,15 +53,15 @@ export function scheduleDeleteIfEmpty(channelId, guild) {
 
 export async function sweepTempRooms() {
   try {
-    if (!config.GUILD_ID || !config.TEMP_VC_CATEGORY_ID || !client) return;
+    if (!config.GUILD_ID || !CHANNELS.BATTLEFRONT || !client) return;
 
     const guild = await client.guilds.fetch(config.GUILD_ID);
-    const category = await guild.channels.fetch(config.TEMP_VC_CATEGORY_ID).catch(() => null);
+    const category = await guild.channels.fetch(CHANNELS.BATTLEFRONT).catch(() => null);
 
     if (!category) return;
 
     const children = category.children?.cache ?? 
-      guild.channels.cache.filter(c => c.parentId === config.TEMP_VC_CATEGORY_ID);
+      guild.channels.cache.filter(c => c.parentId === CHANNELS.BATTLEFRONT);
 
     for (const ch of children.values()) {
       if (ch.type !== ChannelType.GuildVoice) continue;
@@ -137,7 +138,7 @@ export async function createTempVCFor(member) {
   const ch = await guild.channels.create({
     name,
     type: ChannelType.GuildVoice,
-    parent: config.TEMP_VC_CATEGORY_ID,
+    parent: CHANNELS.BATTLEFRONT,
     userLimit: config.TEMP_VC_USER_LIMIT ?? undefined,
     permissionOverwrites: overwrites,
     reason: `Temp VC for ${member.user.tag}`,
@@ -163,4 +164,3 @@ export async function createTempVCFor(member) {
 
   console.log('🛠️ Created temp VC for', member.user.tag, '->', ch.name, `(${ch.id})`);
 }
-

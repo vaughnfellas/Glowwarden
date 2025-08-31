@@ -1,5 +1,6 @@
 import { Events, PermissionFlagsBits } from 'discord.js';
 import { config } from '../config.js';
+import { CHANNELS } from '../channels.js';
 
 const cache = new Map(); // guildId -> Map<code, uses>
 
@@ -9,7 +10,7 @@ async function refreshGuildInvites(guild) {
   if (invites) {
     for (const i of invites.values()) map.set(i.code, i.uses ?? 0);
   }
-  // vanity URL optional; remove this block if you don’t use a vanity
+  // vanity URL optional; remove this block if you don't use a vanity
   if (guild.vanityURLCode) {
     const vanity = await guild.fetchVanityData().catch(() => null);
     if (vanity?.code) map.set(vanity.code, vanity.uses ?? 0);
@@ -69,10 +70,9 @@ export function initInviteRoleService(client) {
 
       const res = await assignRoleForCode(member, code || '__default__');
 
-      const logId = process.env.LOG_CHANNEL_ID;
-      if (logId) {
-        const ch = g.channels.cache.get(logId);
-        if (ch?.isTextBased()) ch.send(
+      const ch = g.channels.cache.get(CHANNELS.HALL_OF_RECORDS);
+      if (ch?.isTextBased()) {
+        ch.send(
           code
             ? `🧭 ${member} joined via \`${code}\`${res.assigned ? ` → role <@&${res.roleId}>` : ''}`
             : `🧭 ${member} joined (invite unknown)${res.assigned ? ` → default <@&${res.roleId}>` : ''}`
