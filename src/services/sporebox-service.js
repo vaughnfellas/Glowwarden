@@ -1,5 +1,5 @@
 // ============= src/services/sporebox-service.js =============
-import { Events, ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder, MessageFlags } from 'discord.js';
+import { ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder } from 'discord.js';
 import { CHANNELS } from '../channels.js';
 
 // Read needed envs once
@@ -14,7 +14,15 @@ const CFG = {
   allyRoleId: process.env.ROLE_ALLY || '',
   straySporeRoleId: process.env.STRAY_SPORE_ROLE_ID || '',
 };
-
+// minimal init so ready.js can import safely
+ export function initSporeBoxService(client) {
+    console.log('[sporebox] service initialized');
+     if (CFG.sporeBoxId) {
+       client.channels.fetch(CFG.sporeBoxId).catch(() => {
+         console.warn('[sporebox] cannot fetch SPORE_BOX_CHANNEL_ID:', CFG.sporeBoxId);
+       });
+     }
+   }
 function hasFlairRole(member) {
   const flairIds = [CFG.lgbtqRoleId, CFG.allyRoleId].filter(Boolean);
   return flairIds.some(id => member.roles.cache.has(id));
@@ -36,11 +44,11 @@ function createVisitorDecree() {
 
   const row = new ActionRowBuilder().addComponents(
     new ButtonBuilder()
-      .setCustomId('visitor:flair:lgbt')
+      .setCustomId('flair:lgbt')
       .setLabel('🌈 LGBTQIA2S+')
       .setStyle(ButtonStyle.Primary),
     new ButtonBuilder()
-      .setCustomId('visitor:flair:ally')
+      .setCustomId('flair:ally')
       .setLabel('🤝 Ally')
       .setStyle(ButtonStyle.Secondary),
   );

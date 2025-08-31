@@ -4,11 +4,12 @@ import { CHANNELS } from '../channels.js';
 import { config } from '../config.js';
 import { sendOathCompletionDM } from '../services/oath-completion-service.js';
 
-const id = v => v && /^\d+$/.test(String(v)) ? String(v) : null;
+const id = v => (v && /^\d+$/.test(String(v))) ? String(v) : null;
 
 const roles = () => ({
-  flairL: id(config.ROLE_LGBTQ),
-  flairA: id(config.ROLE_ALLY),
+  flairL:  id(config.ROLE_LGBTQ),
+  flairA:  id(config.ROLE_ALLY),
+  stray:   id(config.STRAY_SPORE_ROLE_ID), // ← comma was missing before
   baseMem: id(config.ROLE_BASE_MEMBER),
   baseOff: id(config.ROLE_BASE_OFFICER),
   baseVet: id(config.ROLE_BASE_VETERAN),
@@ -24,7 +25,7 @@ const roles = () => ({
 
 function sceneText({ userMention, tier, flavor }) {
   const lines = [];
-  lines.push(`🔜 **Narrator:** Attendants guide ${userMention} through a hidden door of living bark. Candles stir; the spore-song hums.`);
+  lines.push(`📜 **Narrator:** Attendants guide ${userMention} through a hidden door of living bark. Candles stir; the spore-song hums.`);
 
   if (tier === 'mem' && flavor === 'lgbt') {
     lines.push('A chamber draped in rainbow moss welcomes you. Mushroom-folk pour shimmering spore-tea as fragrant smoke curls through the air. Saint Fungus and Geebus drift by with warm smiles. ☕');
@@ -58,75 +59,75 @@ export async function execute(interaction) {
   try {
     if (!interaction.isButton()) return;
 
-    // These are the only buttons we handle here
     const isFlair = interaction.customId === 'flair:lgbt' || interaction.customId === 'flair:ally';
     const isOath  = interaction.customId.startsWith('oath:accept:');
     if (!isFlair && !isOath) return;
 
-    // Allow clicks in either Chamber of Oaths OR Spore Box
-    const allowed = new Set(
-      [CHANNELS.CHAMBER_OF_OATHS, CHANNELS.SPORE_BOX].filter(Boolean).map(String)
-    );
-    if (!allowed.has(interaction.channelId)) {
-      return interaction.reply({
-        content: 'Please use the decree in the Chamber of Oaths or the pinned decree in Spore Box.',
-        flags: MessageFlags.Ephemeral,
-      });
-    }
+    // ✅ Use CHANNELS for channel checks
+    const inSporeBox = CHANNELS.SPORE_BOX && String(interaction.channelId) === String(CHANNELS.SPORE_BOX);
+    const inOaths    = CHANNELS.CHAMBER_OF_OATHS && String(interaction.channelId) === String(CHANNELS.CHAMBER_OF_OATHS);
 
-    // Flair selection
     if (isFlair) {
-      const { flairL, flairA, baseMem, baseOff, baseVet } = roles();
+      const { flairL, flairA, stray, baseMem, baseOff, baseVet } = roles();
       const member = await interaction.guild.members.fetch(interaction.user.id);
 
       // 🔒 already signed? (has either flair) -> stop
-      if ((flairL && member.roles.cache.has(flairL)) || (flairA && member.roles.cache.has(flairA))) {
+      const alreadyFlair =
+        (flairL && member.roles.cache.has(flairL)) ||
+        (flairA && member.roles.cache.has(flairA));
+      if (alreadyFlair) {
         return interaction.reply({
-          content: 'You already carry a flair (🌈 or 🤝). If you need it changed, ping a Steward.',
+          content: 'You’ve already signed the decree (you carry a flair). If you need it changed, ping a Steward.',
           flags: MessageFlags.Ephemeral,
         });
       }
 
-      const flavor = interaction.customId.endsWith('lgbt') ? 'lgbt' : 'ally';
+      const flavor  = interaction.customId.endsWith('lgbt') ? 'lgbt' : 'ally';
       const flairId = flavor === 'lgbt' ? flairL : flairA;
+      if (flairId) await member.roles.add(flairId).catch(() => {});
 
-      // Add flair role
-      if (flairId) await member.roles.add(flairId).catch(console.error);
+      // Are they already a base (member/officer/vet)?
+      const hasBase =
+        (baseVet && member.roles.cache.has(baseVet)) ||
+        (baseOff && member.roles.cache.has(baseOff)) ||
+        (baseMem && member.roles.cache.has(baseMem));
 
-      // Add Stray Spore role (if configured)
-      if (config.STRAY_SPORE_ROLE_ID) {
-        await member.roles.add(config.STRAY_SPORE_ROLE_ID).catch(console.error);
+      // Guest flow (Spore Box OR no base role): add Stray Spore + directions; no oath
+      if (inSporeBox || (!inOaths && !hasBase)) {
+        if (stray) await member.roles.add(stray).catch(() => {});
+        const hallId = CHANNELS.SPOREHALL;
+        const hall   = hallId ? `<#${hallId}>` : 'the waiting hall';
+        const msg = [
+          `Signed. You now carry your flair and are a **Stray Spore**.`,
+          `Head to ${hall} and wait for your host, or use **/vc** in ${hall} to be escorted to their War Chamber.`,
+          `*Unrooted Stray Spores are swept at dawn.*`,
+        ].join('\n');
+        return interaction.reply({ content: msg, flags: MessageFlags.Ephemeral });
       }
 
-      const tier =
-        (baseVet && member.roles.cache.has(baseVet)) ? 'vet' :
-        (baseOff && member.roles.cache.has(baseOff)) ? 'off' :
-        'mem';
+      // Member flow (Chamber of Oaths with base role): show oath button
+      if (inOaths && hasBase) {
+        const tier = member.roles.cache.has(baseVet) ? 'vet'
+                   : member.roles.cache.has(baseOff) ? 'off'
+                   : 'mem';
 
-      const goText = CHANNELS.SPOREHALL
-        ? `🍄🍄 **YOU MUST GO TO <#${CHANNELS.SPOREHALL}>** 🍄🍄
-🌿 Welcome, Stray Spore.
+        const row = new ActionRowBuilder().addComponents(
+          new ButtonBuilder()
+            .setCustomId(`oath:accept:${interaction.user.id}:${tier}:${flavor}`)
+            .setLabel('🗡️ Accept Oath')
+            .setStyle(ButtonStyle.Success)
+        );
 
-Please wait patiently — your host will come to pluck you from <#${CHANNELS.SPOREHALL}>.
-If you find your roots itch with impatience, you may also call upon **/vc** inside the hall
-and choose your host to be guided straight to their War Chamber.
+        return interaction.reply({
+          content: sceneText({ userMention: member.toString(), tier, flavor }),
+          components: [row],
+          flags: MessageFlags.Ephemeral,
+        });
+      }
 
-🌙 Until then, remain still and mindful. Your journey will begin soon.
-
-🌿 The roots of the Empire welcome you — be still, and you will be guided.
-(you can click <#${CHANNELS.SPOREHALL}> in any message to jump there)`
-        : '';
-
-      const row = new ActionRowBuilder().addComponents(
-        new ButtonBuilder()
-          .setCustomId(`oath:accept:${interaction.user.id}:${tier}:${flavor}`)
-          .setLabel('🗡️ Accept Oath')
-          .setStyle(ButtonStyle.Success)
-      );
-
+      // Fallback (wrong channel)
       return interaction.reply({
-        content: sceneText({ userMention: member.toString(), tier, flavor }) + (goText ? `\n\n${goText}` : ''),
-        components: [row],
+        content: 'Please sign where appropriate: guests in **Spore Box**, members in **Chamber of Oaths**.',
         flags: MessageFlags.Ephemeral,
       });
     }
@@ -138,7 +139,7 @@ and choose your host to be guided straight to their War Chamber.
         return interaction.reply({ content: 'This oath is not yours.', flags: MessageFlags.Ephemeral });
       }
 
-      const { baseMem, baseOff, baseVet, final } = roles();
+      const { baseMem, baseOff, baseVet, final, stray } = roles();
       const member = await interaction.guild.members.fetch(interaction.user.id);
 
       const key = `${tier}:${flavor}`;
@@ -152,10 +153,12 @@ and choose your host to be guided straight to their War Chamber.
         for (const r of [baseMem, baseOff, baseVet]) {
           if (r && member.roles.cache.has(r)) await member.roles.remove(r).catch(() => {});
         }
+        if (stray && member.roles.cache.has(stray)) {
+          await member.roles.remove(stray).catch(() => {});
+        }
       }
 
-      // Send welcome DM
-      await sendOathCompletionDM(member, tier, flavor);
+      await sendOathCompletionDM(member, tier, flavor).catch(() => {});
 
       const welcomes = {
         'mem:lgbt': `**Welcome to the Holy Gehy Empire, Mycelioglitter, ${member}!**`,
@@ -174,7 +177,10 @@ and choose your host to be guided straight to their War Chamber.
   } catch (err) {
     console.error('interaction error:', err);
     if (!interaction.replied && !interaction.deferred) {
-      await interaction.reply({ content: '⚠️ Something went wrong with this interaction.', flags: MessageFlags.Ephemeral }).catch(() => {});
+      await interaction.reply({
+        content: '⚠️ Something went wrong with this interaction.',
+        flags: MessageFlags.Ephemeral,
+      }).catch(() => {});
     }
   }
 }
