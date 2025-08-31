@@ -1,6 +1,7 @@
 // ============= src/services/invite-service.js =============
 import { ChannelType, PermissionFlagsBits } from 'discord.js';
-import { CHANNELS } from '../../channels.js';
+import { CHANNELS } from '../channels.js';  // Fixed: only one level up
+import { config } from '../config.js';      // Added missing config import
 
 export async function createSporeBoxInvite(interaction, uses) {
   const spore = await interaction.client.channels.fetch(CHANNELS.SPORE_BOX);
@@ -10,13 +11,13 @@ export async function createSporeBoxInvite(interaction, uses) {
   }
 
   const me = await interaction.guild.members.fetchMe();
-  const perms = channel.permissionsFor(me);
+  const perms = spore.permissionsFor(me);  // Fixed: use 'spore' not 'channel'
   
   if (!perms?.has([PermissionFlagsBits.ViewChannel, PermissionFlagsBits.CreateInstantInvite])) {
     throw new Error('I need *Create Invite* (and View) in *#spore-box*.');
   }
 
-  return await channel.createInvite({
+  return await spore.createInvite({  // Fixed: use 'spore' not 'channel'
     maxAge: 86400, // 24 hours
     maxUses: uses,
     unique: true,

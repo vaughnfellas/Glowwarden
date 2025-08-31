@@ -1,4 +1,4 @@
-// ============= /src/index.js (main entry point) =============
+// ============= index.js (main entry point) =============
 import 'dotenv/config';
 import { Client, GatewayIntentBits } from 'discord.js';
 import { CHANNELS } from './src/channels.js';
