@@ -2,14 +2,16 @@
 import * as straysCommand from './strays.js';
 import * as vcCommand from './vc.js';
 import * as decreeCommand from './decree.js';
-import { Events, MessageFlags } from 'discord.js';
 import * as idsCommand from './ids.js';
+import * as permsCommand from './perms.js';
+import { Events, MessageFlags } from 'discord.js';
 
 const commands = new Map([
   [straysCommand.data.name, straysCommand],
   [vcCommand.data.name, vcCommand],
   [decreeCommand.data.name, decreeCommand],
   [idsCommand.data.name, idsCommand],
+  [permsCommand.data.name, permsCommand],
 ]);
 
 export function loadCommands(client) {
