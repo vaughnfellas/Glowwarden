@@ -9,8 +9,8 @@
     "predeploy:commands": "node scripts/check-env.js --for-deploy",
     "start": "node index.js",
     "dev": "node index.js",
-    "deploy:commands": "node deploy-commands.js",
-    "check:env": "node scripts/check-env.js"
+    "deploy:commands": "node src/deploy-commands.js",
+    "check:env": "node scripts/check-env.js",
   },
   "dependencies": {
     "discord.js": "^14.15.3",
