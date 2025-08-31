@@ -2,14 +2,14 @@
   "name": "spore-inviter",
   "version": "1.0.0",
   "type": "module",
-  "main": "src/index.js",
+  "main": "index.js",
   "scripts": {
     "prestart": "node scripts/check-env.js",
     "predev": "node scripts/check-env.js",
     "predeploy:commands": "node scripts/check-env.js --for-deploy",
-    "start": "node src/index.js",
-    "dev": "node src/index.js",
-    "deploy:commands": "node src/deploy-commands.js",
+    "start": "node index.js",
+    "dev": "node index.js",
+    "deploy:commands": "node deploy-commands.js",
     "check:env": "node scripts/check-env.js"
   },
   "dependencies": {

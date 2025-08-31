@@ -63,4 +63,5 @@ export const config = {
   // Misc
   MAX_USES: toInt(process.env.MAX_USES, 10),
   DEFAULT_USES: toInt(process.env.DEFAULT_USES, 4),
+  TEMP_HOST_ROLE_ID: snowflake(process.env.TEMP_HOST_ROLE_ID),
 };
