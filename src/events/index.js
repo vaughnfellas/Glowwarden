@@ -1,7 +1,7 @@
 // ============= src/events/index.js =============
-import * as readyEvent from './ready.js';
-import * as voiceStateUpdateEvent from './voice-state-update.js';
-import * as interactionButtonsEvent from '../events/interaction-buttons.js';
+import * as readyEvent from './events/ready.js';
+import * as voiceStateUpdateEvent from './events/voice-state-update.js';
+import * as interactionHandlerEvent from './events/interaction-handler.js';
 
 const events = [
   readyEvent,
