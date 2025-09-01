@@ -2,11 +2,10 @@
  import * as readyEvent from './ready.js';
  import * as voiceStateUpdateEvent from './voice-state-update.js';
  import * as interactionHandlerEvent from './interaction-handler.js';
-
 const events = [
   readyEvent,
   voiceStateUpdateEvent,
-  interactionButtonsEvent,       
+  interactionHandlerEvent,       
 ];
 
 export function loadEvents(client) {
