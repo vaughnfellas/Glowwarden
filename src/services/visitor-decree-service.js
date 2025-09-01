@@ -97,7 +97,7 @@ export async function handleDecreeInteraction(interaction) {
     const hall = CFG.sporehallId ? `<#${CFG.sporehallId}>` : 'the waiting hall';
     await interaction.reply({
       content: [
-        `✅ **Welcome to the Empire!** You've been marked as a **${roleName}**.`,
+        `✅ **Welcome to the Empire!** You've been marked as a **${roleName}** Stray Spore.`,
         `Please proceed to ${hall} and wait for your host.`,
         `You can use **/vc** in ${hall} to be escorted to your host's War Chamber.`,
         `*Stray Spores are swept at dawn if not rooted.*`
