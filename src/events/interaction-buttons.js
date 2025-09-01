@@ -87,7 +87,7 @@ export async function execute(interaction) {
         (flairA && member.roles.cache.has(flairA));
       if (alreadyFlair) {
         return interaction.reply({
-          content: 'You've already signed the decree (you carry a flair). If you need it changed, ping a Steward.',
+          content: 'You\'ve already signed the decree (you carry a flair). If you need it changed, ping a Steward.',
           flags: MessageFlags.Ephemeral,
         });
       }
