@@ -4,6 +4,8 @@ import { REST, Routes, SlashCommandBuilder } from 'discord.js';
 import { data as decreeData } from './commands/decree.js';
 import { data as idsData } from './commands/ids.js';
 import { data as permsData } from './commands/perms.js';
+import { data as visitorDecreeData } from './services/visitor-decree-service.js'; // Updated import path
+
 
 // Helper: basic snowflake validator (17–20 digit ID)
 const SNOWFLAKE = v => /^\d{17,20}$/.test(String(v || '').trim());
@@ -43,7 +45,7 @@ const vcCmd = new SlashCommandBuilder()
   );
 
 // Include ALL commands in the deployment
-const commands = [straysCmd, vcCmd, decreeData, idsData, permsData].map(c => c.toJSON());
+const commands = [straysCmd, vcCmd, decreeData, idsData, permsData, visitorDecreeData].map(c => c.toJSON());
 
 // --- REST client ---
 const rest = new REST({ version: '10' }).setToken(TOKEN);

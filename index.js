@@ -8,6 +8,7 @@ import { loadEvents } from './src/events/index.js';
 import { config } from './src/config.js';
 import { initInviteRoleService } from './src/services/invite-role-service.js';
 import { initSporeBoxService } from './src/services/sporebox-service.js';
+import { initVisitorDecreeService } from './src/services/visitor-decree-service.js'; // Add this import
 
 // Start health server
 startHealthServer();
@@ -28,6 +29,7 @@ loadEvents(client);
 // Initialize services before login
 initInviteRoleService(client);
 initSporeBoxService(client);
+initVisitorDecreeService(client); // Add this line
 
 // Login
 client.login(config.DISCORD_TOKEN);

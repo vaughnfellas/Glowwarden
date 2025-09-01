@@ -4,6 +4,7 @@ import * as vcCommand from './vc.js';
 import * as decreeCommand from './decree.js';
 import * as idsCommand from './ids.js';
 import * as permsCommand from './perms.js';
+import * as visitorDecreeCommand from '../services/visitor-decree-service.js'; // Add this import
 import { Events, MessageFlags } from 'discord.js';
 
 const commands = new Map([
@@ -12,6 +13,7 @@ const commands = new Map([
   [decreeCommand.data.name, decreeCommand],
   [idsCommand.data.name, idsCommand],
   [permsCommand.data.name, permsCommand],
+  [visitorDecreeCommand.data.name, visitorDecreeCommand], // Add this line
 ]);
 
 export function loadCommands(client) {

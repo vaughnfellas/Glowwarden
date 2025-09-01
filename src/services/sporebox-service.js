@@ -2,33 +2,18 @@
 import { ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder } from 'discord.js';
 import { CHANNELS } from '../channels.js';
 
-// Read needed envs once
 const CFG = {
-  sporeBoxId: CHANNELS.SPORE_BOX,           
-  sporehallId: CHANNELS.SPOREHALL,          
-  hostRoleId: process.env.HOST_ALERT_ROLE_ID || '',       
+  sporeBoxId: CHANNELS.SPORE_BOX,
+  sporehallId: CHANNELS.SPOREHALL,
+  hostRoleId: process.env.HOST_ALERT_ROLE_ID || '',
   ttlSec: Number(process.env.SPOREBOX_WELCOME_TTL_SEC || 900),
-  
-  // Roles - keeping these for now since they're used in the service
   lgbtqRoleId: process.env.ROLE_LGBTQ || '',
   allyRoleId: process.env.ROLE_ALLY || '',
   straySporeRoleId: process.env.STRAY_SPORE_ROLE_ID || '',
 };
-// minimal init so ready.js can import safely
- export function initSporeBoxService(client) {
-    console.log('[sporebox] service initialized');
-     if (CFG.sporeBoxId) {
-       client.channels.fetch(CFG.sporeBoxId).catch(() => {
-         console.warn('[sporebox] cannot fetch SPORE_BOX_CHANNEL_ID:', CFG.sporeBoxId);
-       });
-     }
-   }
-function hasFlairRole(member) {
-  const flairIds = [CFG.lgbtqRoleId, CFG.allyRoleId].filter(Boolean);
-  return flairIds.some(id => member.roles.cache.has(id));
-}
 
-function createVisitorDecree() {
+// --- build the decree message (exported so a slash command can reuse it)
+export function buildVisitorDecree() {
   const embed = new EmbedBuilder()
     .setTitle('Visitor Decree — Welcome Traveler')
     .setDescription([
@@ -43,17 +28,44 @@ function createVisitorDecree() {
     ].join('\n'));
 
   const row = new ActionRowBuilder().addComponents(
-    new ButtonBuilder()
-      .setCustomId('flair:lgbt')
-      .setLabel('🌈 LGBTQIA2S+')
-      .setStyle(ButtonStyle.Primary),
-    new ButtonBuilder()
-      .setCustomId('flair:ally')
-      .setLabel('🤝 Ally')
-      .setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder().setCustomId('flair:lgbt').setLabel('🌈 LGBTQIA2S+').setStyle(ButtonStyle.Primary),
+    new ButtonBuilder().setCustomId('flair:ally').setLabel('🤝 Ally').setStyle(ButtonStyle.Secondary),
   );
 
   return { embeds: [embed], components: [row] };
+}
+
+// --- ensure one Glowwarden decree message is pinned in #spore-box
+export async function ensureVisitorDecreePinned(client) {
+  if (!CFG.sporeBoxId) return null;
+  const ch = await client.channels.fetch(CFG.sporeBoxId).catch(() => null);
+  if (!ch?.isTextBased?.()) return null;
+
+  const pins = await ch.messages.fetchPinned().catch(() => null);
+  const existing = pins?.find(m =>
+    m.author?.id === client.user.id &&
+    m.embeds?.[0]?.title?.startsWith('Visitor Decree')
+  );
+
+  if (existing) return existing;
+
+  const payload = buildVisitorDecree();
+  const msg = await ch.send(payload);
+  await msg.pin().catch(() => {});         // needs ManageMessages in #spore-box
+  return msg;
+}
+
+// minimal init so ready.js can import safely AND auto-ensure the pin
+export function initSporeBoxService(client) {
+  console.log('[sporebox] service initialized');
+  ensureVisitorDecreePinned(client).catch(err =>
+    console.warn('[sporebox] ensureVisitorDecreePinned:', err?.message || err)
+  );
+}
+
+function hasFlairRole(member) {
+  const flairIds = [CFG.lgbtqRoleId, CFG.allyRoleId].filter(Boolean);
+  return flairIds.some(id => member.roles.cache.has(id));
 }
 
 function welcomeText(member) {
