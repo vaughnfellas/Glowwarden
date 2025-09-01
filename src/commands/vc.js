@@ -76,14 +76,14 @@ export async function autocomplete(interaction) {
         const channel = await guild.channels.fetch(chamberId).catch(() => null);
         const channelName = channel?.name || "War Chamber";
         
-        // Try to get the user's name
-        const user = await interaction.client.users.fetch(ownerId).catch(() => null);
-        const username = user?.username || "Unknown Host";
+        // Try to get the member's server nickname
+        const member = await guild.members.fetch(ownerId).catch(() => null);
+        const displayName = member?.displayName || member?.user?.username || "Unknown Host";
         
         // Only add if it matches the search or there's no search yet
-        if (!focused || username.toLowerCase().includes(focused)) {
+        if (!focused || displayName.toLowerCase().includes(focused)) {
           choices.push({ 
-            name: `${username} (${channelName})`, 
+            name: `${displayName} (${channelName})`, 
             value: ownerId 
           });
         }
@@ -108,12 +108,12 @@ export async function autocomplete(interaction) {
       if (hostRole) {
         const hosts = hostRole.members.map(m => ({
           id: m.id,
-          username: m.user.username
+          displayName: m.displayName // Use displayName instead of username
         }));
         
         for (const host of hosts) {
-          if (!focused || host.username.toLowerCase().includes(focused)) {
-            choices.push({ name: host.username, value: host.id });
+          if (!focused || host.displayName.toLowerCase().includes(focused)) {
+            choices.push({ name: host.displayName, value: host.id });
           }
         }
       }

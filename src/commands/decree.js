@@ -1,3 +1,4 @@
+// ============= src/commands/decree.js =============
 import {
   SlashCommandBuilder,
   PermissionFlagsBits,
@@ -24,20 +25,23 @@ export async function execute(interaction) {
   }
 
   const embed = new EmbedBuilder()
-    .setTitle('Decree — Welcome Traveler')
+    .setTitle('📜 **Imperial Decree — Welcome Traveler**')
     .setDescription(
       [
-        'Hear the call, wayfarer! You now stand before the radiant banners of the Empire, where Pride is power, spores are sacred, and fellowship endures forever.',
+        '*Hear the call, wayfarer! You now stand before the radiant banners of the Empire, where Pride is power, spores are sacred, and fellowship endures forever.*',
         '',
-        '🛡 **The Imperial Decree**',
+        '🛡️ **The Imperial Decree**',
         '• All are welcome beneath our rainbow standard — LGBTQ+ and Allies alike.',
         '• Heresy of hate shall not pass our gates — bigotry, slurs, or mockery of identity are banishable offenses.',
-        '• Claim your true name — set your nickname to your WoW character.',
+        '• **Claim your true name** — declare your WoW character name as you sign.',
         '• Honor the fellowship — laughter, respect, and solidarity guide our quests more than gold or gear.',
         '',
-        'Place your seal upon this decree and declare your truth:',
+        '**Place your seal upon this decree and declare your truth:**',
+        '*When you sign below, you\'ll be prompted to enter your character name for the guild records.*',
       ].join('\n')
-    );
+    )
+    .setColor(0x8B4513)
+    .setFooter({ text: 'May the spores guide your path, champion.' });
 
   const row = new ActionRowBuilder().addComponents(
     new ButtonBuilder().setCustomId('flair:lgbt').setLabel('🌈 LGBTQIA2S+').setStyle(ButtonStyle.Primary),
@@ -45,4 +49,49 @@ export async function execute(interaction) {
   );
 
   await interaction.reply({ embeds: [embed], components: [row] });
+}
+
+// ============= NEW: Character Name Collection Modal =============
+import { 
+  ModalBuilder, 
+  TextInputBuilder, 
+  TextInputStyle, 
+  ActionRowBuilder as ModalActionRowBuilder 
+} from 'discord.js';
+
+export function createCharacterNameModal(flavor) {
+  const modal = new ModalBuilder()
+    .setCustomId(`character_modal:${flavor}`)
+    .setTitle('🏰 Sign the Imperial Decree');
+
+  const characterInput = new TextInputBuilder()
+    .setCustomId('character_name')
+    .setLabel('Your WoW Character Name')
+    .setStyle(TextInputStyle.Short)
+    .setPlaceholder('Enter your character\'s name (e.g., Thrall, Jaina)')
+    .setRequired(true)
+    .setMaxLength(32);
+
+  const classInput = new TextInputBuilder()
+    .setCustomId('character_class')
+    .setLabel('Character Class (Optional)')
+    .setStyle(TextInputStyle.Short)
+    .setPlaceholder('Death Knight, Mage, Warrior, etc.')
+    .setRequired(false)
+    .setMaxLength(20);
+
+  const realmInput = new TextInputBuilder()
+    .setCustomId('character_realm')
+    .setLabel('Realm (Optional)')
+    .setStyle(TextInputStyle.Short)
+    .setPlaceholder('Stormrage, Tichondrius, etc.')
+    .setRequired(false)
+    .setMaxLength(30);
+
+  const firstRow = new ModalActionRowBuilder().addComponents(characterInput);
+  const secondRow = new ModalActionRowBuilder().addComponents(classInput);
+  const thirdRow = new ModalActionRowBuilder().addComponents(realmInput);
+
+  modal.addComponents(firstRow, secondRow, thirdRow);
+  return modal;
 }
