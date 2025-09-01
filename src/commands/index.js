@@ -5,8 +5,9 @@ import * as decreeCommand from './decree.js';
 import * as idsCommand from './ids.js';
 import * as permsCommand from './perms.js';
 import * as visitorDecreeCommand from '../services/visitor-decree-service.js';
-import * as addaltCommand from './addalt.js'; // Import the addalt command
+import * as addaltCommand from './addalt.js';
 import { Events, MessageFlags } from 'discord.js';
+import { CharacterDB } from '../database/characters.js';
 
 const commands = new Map([
   [straysCommand.data.name, straysCommand],
@@ -15,15 +16,15 @@ const commands = new Map([
   [idsCommand.data.name, idsCommand],
   [permsCommand.data.name, permsCommand],
   [visitorDecreeCommand.data.name, visitorDecreeCommand],
-  [addaltCommand.data.name, addaltCommand],              // Add addalt command
-  [addaltCommand.switchData.name, {                      // Add switch command
+  [addaltCommand.data.name, addaltCommand],
+  [addaltCommand.switchData.name, {
     execute: addaltCommand.executeSwitch,
     autocomplete: addaltCommand.autocompleteSwitchCharacters
   }],
-  [addaltCommand.rosterData.name, {                      // Add roster command
+  [addaltCommand.rosterData.name, {
     execute: addaltCommand.executeRoster
   }],
-  [addaltCommand.deleteAltData.name, {                   // Add deletealt command
+  [addaltCommand.deleteAltData.name, {
     execute: addaltCommand.executeDeleteAlt,
     autocomplete: addaltCommand.autocompleteDeleteCharacters
   }],
@@ -31,32 +32,45 @@ const commands = new Map([
 
 export function loadCommands(client) {
   client.on(Events.InteractionCreate, async (interaction) => {
-    // Handle select menu interactions for addalt
-    if (interaction.isStringSelectMenu() && 
-        interaction.customId.startsWith('addalt_class:')) {
-      try {
-        const userId = interaction.customId.split(':')[1];
-        if (userId === interaction.user.id) {
-          const selectedClass = interaction.values[0];
-          const modal = addaltCommand.createAddAltModal(selectedClass, userId);
-          await interaction.showModal(modal);
+    try {
+      // Handle select menu interactions for addalt (only the non-oath ones)
+      if (interaction.isStringSelectMenu() && 
+          interaction.customId.startsWith('addalt_class:')) {
+        try {
+          const userId = interaction.customId.split(':')[1];
+          if (userId === interaction.user.id) {
+            const selectedClass = interaction.values[0];
+            const modal = addaltCommand.createAddAltModal(selectedClass, userId);
+            await interaction.showModal(modal);
+          }
+        } catch (err) {
+          console.error('Error handling addalt class selection:', err);
+          if (!interaction.replied && !interaction.deferred) {
+            await interaction.reply({
+              content: '⚠️ Something went wrong with class selection.',
+              flags: MessageFlags.Ephemeral
+            }).catch(() => {});
+          }
         }
-      } catch (err) {
-        console.error('Error handling class selection:', err);
+        return;
       }
-      return;
-    }
-    
-    // Handle modal submissions for addalt
-    if (interaction.isModalSubmit() && 
-        interaction.customId.startsWith('addalt_modal:')) {
-      try {
-        const [, userId, selectedClass] = interaction.customId.split(':');
-        if (userId === interaction.user.id) {
-          const name = interaction.fields.getTextInputValue('character_name');
-          const realm = interaction.fields.getTextInputValue('character_realm');
-          const isMainText = interaction.fields.getTextInputValue('is_main');
-          const isMain = isMainText.toLowerCase() === 'yes';
+      
+      // Handle modal submissions for addalt (only the non-oath ones)
+      if (interaction.isModalSubmit() && 
+          interaction.customId.startsWith('addalt_modal:')) {
+        try {
+          const [, userId, selectedClass] = interaction.customId.split(':');
+          if (userId !== interaction.user.id) {
+            return interaction.reply({
+              content: 'This is not your character creation.',
+              flags: MessageFlags.Ephemeral
+            });
+          }
+
+          const name = interaction.fields.getTextInputValue('character_name').trim();
+          const realm = interaction.fields.getTextInputValue('character_realm')?.trim() || null;
+          const isMainText = interaction.fields.getTextInputValue('is_main')?.trim().toLowerCase() || '';
+          const isMain = isMainText === 'yes' || isMainText === 'y' || isMainText === 'true';
           
           // Validate name
           const nameRegex = /^[a-zA-ZÀ-ÿ\s'\-]+$/;
@@ -77,34 +91,58 @@ export function loadCommands(client) {
           
           // Add the new character
           const characterClass = selectedClass === 'none' ? null : selectedClass;
-          CharacterDB.addCharacter(userId, name, characterClass, realm || null, isMain);
+          CharacterDB.addCharacter(userId, name, characterClass, realm, isMain);
+          
+          // Try to set nickname if it's their first character or main
+          const characters = CharacterDB.getCharacters(userId);
+          if (characters.length === 1 || isMain) {
+            try {
+              await interaction.member.setNickname(name);
+            } catch (error) {
+              // Check if it's a permissions error
+              if (error.code === 50013) {
+                console.log(`No permission to set nickname for ${interaction.member.user.tag}`);
+              } else {
+                console.error('Failed to set nickname:', error);
+              }
+              // Continue anyway - this is not critical
+            }
+          }
           
           // Respond to the user
           const classText = selectedClass !== 'none' ? ` ${selectedClass}` : '';
           const realmText = realm ? ` of ${realm}` : '';
           const mainText = isMain ? ' as your **main character**' : ' as an alt';
           
-          await interaction.reply({
+          return interaction.reply({
             content: `✅ **${name}**${classText}${realmText} has been added to your roster${mainText}!\n\nUse \`/switch\` to change to this character.`,
             flags: MessageFlags.Ephemeral
           });
+
+        } catch (err) {
+          console.error('Error handling character registration:', err);
+          if (!interaction.replied && !interaction.deferred) {
+            await interaction.reply({
+              content: '⚠️ Something went wrong while registering your character.',
+              flags: MessageFlags.Ephemeral
+            }).catch(e => console.error('Failed to send error response:', e));
+          }
         }
-      } catch (err) {
-        console.error('Error handling character registration:', err);
-        await interaction.reply({
-          content: '⚠️ Something went wrong while registering your character.',
-          flags: MessageFlags.Ephemeral
-        });
+        return;
       }
-      return;
-    }
-    
-    // Handle button interactions for deletealt
-    if (interaction.isButton()) {
-      if (interaction.customId.startsWith('confirm_delete:')) {
-        try {
-          const [, userId, encodedName] = interaction.customId.split(':');
-          if (userId === interaction.user.id) {
+      
+      // Handle button interactions for deletealt
+      if (interaction.isButton()) {
+        if (interaction.customId.startsWith('confirm_delete:')) {
+          try {
+            const [, userId, encodedName] = interaction.customId.split(':');
+            if (userId !== interaction.user.id) {
+              return interaction.reply({
+                content: 'This is not your character deletion.',
+                flags: MessageFlags.Ephemeral
+              });
+            }
+
             const characterName = decodeURIComponent(encodedName);
             
             if (!CharacterDB.characterExists(userId, characterName)) {
@@ -130,55 +168,61 @@ export function loadCommands(client) {
               }
             }
             
-            await interaction.update({
+            return interaction.update({
               content: `✅ Character **${characterName}** has been deleted from your roster.${additionalMessage}`,
               components: [],
               flags: MessageFlags.Ephemeral
             });
+
+          } catch (err) {
+            console.error('Error handling character deletion:', err);
+            if (!interaction.replied && !interaction.deferred) {
+              await interaction.update({
+                content: '⚠️ Something went wrong while deleting your character.',
+                components: [],
+                flags: MessageFlags.Ephemeral
+              }).catch(e => console.error('Failed to send error response:', e));
+            }
           }
-        } catch (err) {
-          console.error('Error handling character deletion:', err);
-          await interaction.update({
-            content: '⚠️ Something went wrong while deleting your character.',
+        } else if (interaction.customId.startsWith('cancel_delete:')) {
+          return interaction.update({
+            content: '❌ Character deletion cancelled.',
             components: [],
             flags: MessageFlags.Ephemeral
           });
         }
-      } else if (interaction.customId.startsWith('cancel_delete:')) {
-        await interaction.update({
-          content: '❌ Character deletion cancelled.',
-          components: [],
-          flags: MessageFlags.Ephemeral
-        });
+        return;
       }
-      return;
-    }
 
-    // Handle regular commands
-    if (interaction.isChatInputCommand()) {
-      const command = commands.get(interaction.commandName);
-      if (command) {
-        try {
-          await command.execute(interaction);
-        } catch (err) {
-          console.error(`Error executing /${interaction.commandName}:`, err);
-          if (!interaction.replied) {
-            await interaction.reply({ 
-              content: '⚠️ Something went wrong.', 
-              flags: MessageFlags.Ephemeral 
-            }).catch(() => {});
+      // Handle regular commands
+      if (interaction.isChatInputCommand()) {
+        const command = commands.get(interaction.commandName);
+        if (command) {
+          try {
+            await command.execute(interaction);
+          } catch (err) {
+            console.error(`Error executing /${interaction.commandName}:`, err);
+            if (!interaction.replied && !interaction.deferred) {
+              await interaction.reply({ 
+                content: '⚠️ Something went wrong.', 
+                flags: MessageFlags.Ephemeral 
+              }).catch(() => {});
+            }
+          }
+        }
+      } else if (interaction.isAutocomplete()) {
+        const command = commands.get(interaction.commandName);
+        if (command?.autocomplete) {
+          try {
+            await command.autocomplete(interaction);
+          } catch (err) {
+            console.error(`Error in autocomplete for /${interaction.commandName}:`, err);
           }
         }
       }
-    } else if (interaction.isAutocomplete()) {
-      const command = commands.get(interaction.commandName);
-      if (command?.autocomplete) {
-        try {
-          await command.autocomplete(interaction);
-        } catch (err) {
-          console.error(`Error in autocomplete for /${interaction.commandName}:`, err);
-        }
-      }
+
+    } catch (error) {
+      console.error('Critical error in interaction handler:', error);
     }
   });
 
