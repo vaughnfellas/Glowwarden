@@ -1,4 +1,8 @@
 // ============= src/commands/strays.js =============
+import { SlashCommandBuilder, MessageFlags } from 'discord.js';
+import { config } from '../config.js';
+import { createSporeBoxInvite, sendInviteToUser, logInviteCreation } from '../services/invite-service.js';
+
 export const data = new SlashCommandBuilder()
   .setName('strays')
   .setDescription('Generate Stray Spore invites for your friends')
