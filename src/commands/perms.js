@@ -202,17 +202,14 @@ const DEFAULT_PERMISSIONS = {
   },
   categories: {
     [CHANNELS.BATTLEFRONT]: {
-      name: 'Battlefront',
-      description: 'Temporary voice channels',
       overwrites: [
-        {
-          id: '@everyone',
-          deny: ['ViewChannel', 'Connect']
+        { id: '@everyone', deny: ['ViewChannel', 'Connect'] },
+        { 
+          id: config.STRAY_SPORE_ROLE_ID, 
+          allow: ['Connect', 'Speak', 'UseVAD'] 
+          // Note: NOT giving ViewChannel - they only see channels they're in
         },
-        {
-          id: 'BOT',
-          allow: ['ViewChannel', 'Connect', 'ManageChannels', 'MoveMembers']
-        }
+        { id: 'BOT', allow: ['ViewChannel', 'Connect', 'ManageChannels', 'MoveMembers'] }
       ]
     }
   }
