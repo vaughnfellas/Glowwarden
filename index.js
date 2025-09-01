@@ -1,55 +1,59 @@
 // ============= index.js (main entry point) =============
 
-// Add global error handlers at the very top
-process.on('unhandledRejection', (error) => {
-  console.error('Unhandled promise rejection:', error);
-});
-
-process.on('uncaughtException', (error) => {
-  console.error('Uncaught exception:', error);
-  // Don't exit - just log the error
-});
+// Global error handlers
+process.on('unhandledRejection', (err) => console.error('Unhandled promise rejection:', err));
+process.on('uncaughtException', (err) => console.error('Uncaught exception:', err));
 
 import 'dotenv/config';
 import { Client, GatewayIntentBits } from 'discord.js';
+
 import { CHANNELS } from './src/channels.js';
 import { startHealthServer } from './src/health-server.js';
-import { loadCommands } from './src/commands/index.js';
 import { loadEvents } from './src/events/index.js';
 import { config } from './src/config.js';
 import { initVisitorDecreeService } from './src/services/visitor-decree-service.js';
 import { initInviteRoleService } from './src/services/invite-role-service.js';
 import { handleTrackedInviteJoin, cleanupExpiredInvites } from './src/services/invite-service.js';
 
-// Import the consolidated interaction handler
-import './src/events/interaction-handler.js';
+// ✅ correct path (was './commands/index.js')
+import { commands, loadCommands } from './src/commands/index.js';
 
-// Start health server
-startHealthServer();
+// ❌ REMOVE: this would double-register handlers if it attaches listeners on import
+// import './src/events/interaction-handler.js';
 
-// Create Discord client
+// Create Discord client FIRST
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
     GatewayIntentBits.GuildVoiceStates,
     GatewayIntentBits.GuildMembers,
-    GatewayIntentBits.GuildInvites, // ← Add this for invite tracking
+    GatewayIntentBits.GuildInvites, // needed for invite tracking
   ],
 });
 
-// Load commands and events
+// Expose command map for /glowwarden help
+client.commands = commands;
+
+// Wire command & event routers
 loadCommands(client);
-loadEvents(client); // Keep this if you have other events
+loadEvents(client);
 
-// Initialize services before login
-initInviteRoleService(client);
-initVisitorDecreeService(client);
+// Init services when the bot is ready (guild caches available)
+client.once('ready', () => {
+  initInviteRoleService(client);
+  initVisitorDecreeService(client);
 
-// Set up periodic cleanup of expired invites (every 30 minutes)
-setInterval(() => {
-  cleanupExpiredInvites();
-  console.log('Cleaned up expired tracked invites');
-}, 30 * 60 * 1000);
+  // periodic cleanup of expired invites
+  setInterval(() => {
+    cleanupExpiredInvites();
+    console.log('Cleaned up expired tracked invites');
+  }, 30 * 60 * 1000);
+
+  console.log(`Logged in as ${client.user.tag}`);
+});
+
+// Start health server (for Render keepalive)
+startHealthServer();
 
 // Login
 client.login(config.DISCORD_TOKEN);
