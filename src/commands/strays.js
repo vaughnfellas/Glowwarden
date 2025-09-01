@@ -1,7 +1,7 @@
 // ============= src/commands/strays.js =============
-import { SlashCommandBuilder, MessageFlags } from 'discord.js';
+import { SlashCommandBuilder, EmbedBuilder, MessageFlags } from 'discord.js';
 import { config } from '../config.js';
-import { createSporeBoxInvite, sendInviteToUser, logInviteCreation } from '../services/invite-service.js';
+import { createRoleInvite, sendInviteToUser, logInviteCreation } from '../services/invite-service.js';
 
 export const data = new SlashCommandBuilder()
   .setName('strays')

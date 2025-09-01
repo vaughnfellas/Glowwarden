@@ -17,9 +17,12 @@ import { startHealthServer } from './src/health-server.js';
 import { loadCommands } from './src/commands/index.js';
 import { loadEvents } from './src/events/index.js';
 import { config } from './src/config.js';
-import { initInviteRoleService } from './src/services/invite-role-service.js';
-import { initSporeBoxService } from './src/services/sporebox-service.js';
 import { initVisitorDecreeService } from './src/services/visitor-decree-service.js';
+import { initInviteRoleService } from './src/services/invite-role-service.js';
+import { handleTrackedInviteJoin, cleanupExpiredInvites } from './src/services/invite-service.js';
+
+// Import the consolidated interaction handler
+import './src/events/interaction-handler.js';
 
 // Start health server
 startHealthServer();
@@ -30,17 +33,23 @@ const client = new Client({
     GatewayIntentBits.Guilds,
     GatewayIntentBits.GuildVoiceStates,
     GatewayIntentBits.GuildMembers,
+    GatewayIntentBits.GuildInvites, // ← Add this for invite tracking
   ],
 });
 
 // Load commands and events
 loadCommands(client);
-loadEvents(client);
+loadEvents(client); // Keep this if you have other events
 
 // Initialize services before login
 initInviteRoleService(client);
-initSporeBoxService(client);
 initVisitorDecreeService(client);
+
+// Set up periodic cleanup of expired invites (every 30 minutes)
+setInterval(() => {
+  cleanupExpiredInvites();
+  console.log('Cleaned up expired tracked invites');
+}, 30 * 60 * 1000);
 
 // Login
 client.login(config.DISCORD_TOKEN);

@@ -1,5 +1,6 @@
 // ============= src/commands/index.js =============
 import * as straysCommand from './strays.js';
+import * as generateInviteCommand from './generate-invite.js';
 import * as vcCommand from './vc.js';
 import * as decreeCommand from './decree.js';
 import * as idsCommand from './ids.js';
@@ -11,6 +12,7 @@ import { CharacterDB } from '../database/characters.js';
 
 const commands = new Map([
   [straysCommand.data.name, straysCommand],
+  [generateInviteCommand.data.name, generateInviteCommand],
   [vcCommand.data.name, vcCommand],
   [decreeCommand.data.name, decreeCommand],
   [idsCommand.data.name, idsCommand],

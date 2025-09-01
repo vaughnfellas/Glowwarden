@@ -1,4 +1,8 @@
 // ============= src/commands/generate-invite.js =============
+import { SlashCommandBuilder, EmbedBuilder, PermissionFlagsBits } from 'discord.js';
+import { config } from '../config.js';
+import { createRoleInvite, logInviteCreation, getActiveTrackedInvites, revokeTrackedInvite } from '../services/invite-service.js';
+
 export const data = new SlashCommandBuilder()
   .setName('generate-invite')
   .setDescription('Generate role-specific invite codes')
