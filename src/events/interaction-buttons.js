@@ -1,5 +1,5 @@
 // ============= src/events/interaction-buttons.js =============
-import { Events, ActionRowBuilder, ButtonBuilder, ButtonStyle, MessageFlags } from 'discord.js';
+import { Events, ActionRowBuilder, ButtonBuilder, ButtonStyle, MessageFlags, EmbedBuilder } from 'discord.js';
 import { CHANNELS } from '../channels.js';
 import { config } from '../config.js';
 import { sendOathCompletionDM } from '../services/oath-completion-service.js';

@@ -20,6 +20,13 @@ const commands = new Map([
     execute: addaltCommand.executeSwitch,
     autocomplete: addaltCommand.autocompleteSwitchCharacters
   }],
+  [addaltCommand.rosterData.name, {                      // Add roster command
+    execute: addaltCommand.executeRoster
+  }],
+  [addaltCommand.deleteAltData.name, {                   // Add deletealt command
+    execute: addaltCommand.executeDeleteAlt,
+    autocomplete: addaltCommand.autocompleteDeleteCharacters
+  }],
 ]);
 
 export function loadCommands(client) {
@@ -51,24 +58,26 @@ export function loadCommands(client) {
           const isMainText = interaction.fields.getTextInputValue('is_main');
           const isMain = isMainText.toLowerCase() === 'yes';
           
-          // Get user's characters or initialize empty array
-          const userChars = addaltCommand.userCharacters.get(userId) || [];
+          // Validate name
+          const nameRegex = /^[a-zA-ZÀ-ÿ\s'\-]+$/;
+          if (!nameRegex.test(name)) {
+            return interaction.reply({
+              content: '⛔ Character names can only contain letters, spaces, apostrophes, and hyphens.',
+              flags: MessageFlags.Ephemeral,
+            });
+          }
           
-          // If this is set as main, unset any existing mains
-          if (isMain) {
-            userChars.forEach(char => char.isMain = false);
+          // Check if character already exists
+          if (CharacterDB.characterExists(userId, name)) {
+            return interaction.reply({
+              content: `⛔ You already have a character named **${name}** registered.`,
+              flags: MessageFlags.Ephemeral,
+            });
           }
           
           // Add the new character
-          userChars.push({
-            name,
-            class: selectedClass === 'none' ? null : selectedClass,
-            realm: realm || null,
-            isMain
-          });
-          
-          // Save back to the map
-          addaltCommand.userCharacters.set(userId, userChars);
+          const characterClass = selectedClass === 'none' ? null : selectedClass;
+          CharacterDB.addCharacter(userId, name, characterClass, realm || null, isMain);
           
           // Respond to the user
           const classText = selectedClass !== 'none' ? ` ${selectedClass}` : '';
@@ -84,6 +93,61 @@ export function loadCommands(client) {
         console.error('Error handling character registration:', err);
         await interaction.reply({
           content: '⚠️ Something went wrong while registering your character.',
+          flags: MessageFlags.Ephemeral
+        });
+      }
+      return;
+    }
+    
+    // Handle button interactions for deletealt
+    if (interaction.isButton()) {
+      if (interaction.customId.startsWith('confirm_delete:')) {
+        try {
+          const [, userId, encodedName] = interaction.customId.split(':');
+          if (userId === interaction.user.id) {
+            const characterName = decodeURIComponent(encodedName);
+            
+            if (!CharacterDB.characterExists(userId, characterName)) {
+              return interaction.update({
+                content: `⛔ Character **${characterName}** no longer exists.`,
+                components: [],
+                flags: MessageFlags.Ephemeral
+              });
+            }
+            
+            const character = CharacterDB.getCharacter(userId, characterName);
+            const wasMain = character.isMain;
+            
+            // Delete the character
+            CharacterDB.removeCharacter(userId, characterName);
+            
+            // If it was the main, suggest setting a new main
+            let additionalMessage = '';
+            if (wasMain) {
+              const remainingChars = CharacterDB.getCharacters(userId);
+              if (remainingChars.length > 0) {
+                additionalMessage = "\n\nSince this was your main character, you should set a new main using `/switch` and typing 'yes' when asked if it's your main.";
+              }
+            }
+            
+            await interaction.update({
+              content: `✅ Character **${characterName}** has been deleted from your roster.${additionalMessage}`,
+              components: [],
+              flags: MessageFlags.Ephemeral
+            });
+          }
+        } catch (err) {
+          console.error('Error handling character deletion:', err);
+          await interaction.update({
+            content: '⚠️ Something went wrong while deleting your character.',
+            components: [],
+            flags: MessageFlags.Ephemeral
+          });
+        }
+      } else if (interaction.customId.startsWith('cancel_delete:')) {
+        await interaction.update({
+          content: '❌ Character deletion cancelled.',
+          components: [],
           flags: MessageFlags.Ephemeral
         });
       }

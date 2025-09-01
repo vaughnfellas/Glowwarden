@@ -5,8 +5,7 @@ import { data as decreeData } from './commands/decree.js';
 import { data as idsData } from './commands/ids.js';
 import { data as permsData } from './commands/perms.js';
 import { data as visitorDecreeData } from './services/visitor-decree-service.js';
-import { data as addaltData } from './commands/addalt.js'; // Import addalt command
-import { switchData } from './commands/addalt.js'; // Import switch command from addalt.js
+import { data as addaltData, switchData, rosterData, deleteAltData } from './commands/addalt.js';
 
 
 // Helper: basic snowflake validator (17–20 digit ID)
@@ -55,7 +54,9 @@ const commands = [
   permsData, 
   visitorDecreeData,
   addaltData,    // Add the addalt command
-  switchData     // Add the switch command
+  switchData,    // Add the switch command
+  rosterData,    // Add the roster command
+  deleteAltData  // Add the deletealt command
 ].map(c => c.toJSON());
 
 // --- REST client ---
