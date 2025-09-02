@@ -8,7 +8,9 @@ import { data as visitorDecreeData } from './services/visitor-decree-service.js'
 import { data as addaltData, switchData, rosterData, deleteAltData } from './commands/addalt.js';
 import { data as generateInviteData } from './commands/generate-invite.js';
 import { data as glowwardenData } from './commands/glowwarden.js';
-import { data as statusData, pingData } from './commands/status.js';
+import { data as statusData } from './commands/status.js';
+import { data as pingData } from './commands/ping.js';
+
 
 // Helper: basic snowflake validator (17–20 digit ID)
 const SNOWFLAKE = v => /^\d{17,20}$/.test(String(v || '').trim());
