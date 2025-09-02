@@ -28,19 +28,6 @@ if (GUILD_ID && !SNOWFLAKE(GUILD_ID)) {
 }
 
 // --- Build your commands ---
-const straysCmd = new SlashCommandBuilder()
-  .setName('strays')
-  .setDescription('[Optional] Manual Stray invite - War Chambers auto-generate these!')
-  .addIntegerOption(opt =>
-    opt.setName('uses')
-      .setDescription('Number of uses (default unlimited, max 25)')
-      .setMinValue(1)
-      .setMaxValue(25)
-  )
-  .addStringOption(opt =>
-    opt.setName('reason')
-      .setDescription('Reason for this manual invite')
-  );
 
 const vcCmd = new SlashCommandBuilder()
   .setName('vc')
@@ -53,7 +40,6 @@ const vcCmd = new SlashCommandBuilder()
 
 // Include ALL commands in the deployment
 const commands = [
-  straysCmd, 
   vcCmd, 
   vcStatusData,
   decreeData, 

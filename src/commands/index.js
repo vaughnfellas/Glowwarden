@@ -1,7 +1,6 @@
 // ============= src/commands/index.js =============
 import { Events, MessageFlags } from 'discord.js';
 
-import * as straysCommand from './strays.js';
 import * as generateInviteCommand from './generate-invite.js';
 import * as vcCommand from './vc.js';
 import * as decreeCommand from './decree.js';
@@ -17,7 +16,6 @@ import { CharacterDB } from '../database/characters.js';
 // ONE source of truth: export a single map with everything
 export const commands = new Map([
   [glowwarden.data.name, glowwarden],
-  [straysCommand.data.name, straysCommand],
   [generateInviteCommand.data.name, generateInviteCommand],
   [vcCommand.data.name, vcCommand],
   [decreeCommand.data.name, decreeCommand],

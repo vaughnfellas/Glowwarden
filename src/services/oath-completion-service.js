@@ -66,17 +66,7 @@ function createWelcomeDM(member, tier, flavor) {
         ].join('\n'),
         inline: false,
       },
-      {
-        name: '🌿 Stray Spore Invites',
-        value: [
-          'Use `/strays` to generate guest passes for friends:',
-          '• Each invite lasts 24 hours',
-          '• You can create 1-10 uses per command',
-          '• Guests land in #spore-box and must sign the Visitor Decree',
-          '• They become Stray Spores until you guide them to full membership'
-        ].join('\n'),
-        inline: false,
-      },
+     
       {
         name: '🏰 War Chambers (Temp VCs)',
         value: [
