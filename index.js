@@ -1,7 +1,9 @@
 // ============= index.js (main entry point) =============
-// index.js – must be first lines
-import dotenv from 'dotenv';
-dotenv.config({ path: '.env', override: true });
+ // Load .env only when DISCORD_TOKEN isn't already provided by the host (local dev)
+ if (!process.env.DISCORD_TOKEN) {
+   const { config } = await import('dotenv');
+   config(); // no override
+ }
 // Global error handlers
 process.on('unhandledRejection', (err) => console.error('Unhandled promise rejection:', err));
 process.on('uncaughtException', (err) => console.error('Uncaught exception:', err));
