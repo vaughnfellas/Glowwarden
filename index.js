@@ -60,4 +60,13 @@ client.once('ready', () => {
 startHealthServer();
 
 // Login
-client.login(config.DISCORD_TOKEN);
+// Login (read directly from env and fail loudly)
+ const token = process.env.DISCORD_TOKEN;
+ if (!token) {
+   console.error('❌ No DISCORD_TOKEN in env. Add it in Render → Environment.');
+   process.exit(1);
+ }
+ client.login(token).catch(err => {
+   console.error('❌ Login failed:', err);
+   process.exit(1);
+ });
