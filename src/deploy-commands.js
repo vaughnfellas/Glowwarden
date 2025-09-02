@@ -6,7 +6,8 @@ import { data as idsData } from './commands/ids.js';
 import { data as permsData } from './commands/perms.js';
 import { data as visitorDecreeData } from './services/visitor-decree-service.js';
 import { data as addaltData, switchData, rosterData, deleteAltData } from './commands/addalt.js';
-
+import { data as generateInviteData } from './commands/generate-invite.js';
+import { data as glowwardenData } from './commands/glowwarden.js';
 
 // Helper: basic snowflake validator (17–20 digit ID)
 const SNOWFLAKE = v => /^\d{17,20}$/.test(String(v || '').trim());
@@ -53,10 +54,12 @@ const commands = [
   idsData, 
   permsData, 
   visitorDecreeData,
-  addaltData,    // Add the addalt command
-  switchData,    // Add the switch command
-  rosterData,    // Add the roster command
-  deleteAltData  // Add the deletealt command
+  addaltData,
+  switchData,
+  rosterData,
+  deleteAltData,
+  generateInviteData,  // ADD THIS
+  glowwardenData       // ADD THIS
 ].map(c => c.toJSON());
 
 // --- REST client ---
@@ -70,13 +73,13 @@ const rest = new REST({ version: '10' }).setToken(TOKEN);
         Routes.applicationGuildCommands(CLIENT_ID, GUILD_ID),
         { body: commands }
       );
-      console.log(`✓ Deployed ${commands.length} commands to guild ${GUILD_ID}`);
+      console.log(`✔ Deployed ${commands.length} commands to guild ${GUILD_ID}`);
     } else {
       await rest.put(
         Routes.applicationCommands(CLIENT_ID),
         { body: commands }
       );
-      console.log(`✓ Deployed ${commands.length} GLOBAL commands (may take up to ~1h to appear)`);
+      console.log(`✔ Deployed ${commands.length} GLOBAL commands (may take up to ~1h to appear)`);
     }
   } catch (err) {
     console.error('❌ Deploy failed:', err);

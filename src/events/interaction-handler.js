@@ -63,30 +63,6 @@ function createCharacterNameModal(flavor) {
   return modal;
 }
 
-// Create class selection for oath ceremony
-function createClassSelection(userId) {
-  const classes = [
-    'Death Knight', 'Demon Hunter', 'Druid', 'Evoker', 'Hunter', 'Mage',
-    'Monk', 'Paladin', 'Priest', 'Rogue', 'Shaman', 'Warlock', 'Warrior'
-  ];
-
-  const embed = new EmbedBuilder()
-    .setTitle('🎭 Choose Your Class')
-    .setDescription('Select your character\'s class to complete the oath ceremony:')
-    .setColor(0x8B4513);
-
-  const options = classes.map(cls => ({ label: cls, value: cls.toLowerCase().replace(' ', '') }));
-  options.push({ label: 'No Class/Other', value: 'none' });
-
-  const selectMenu = new StringSelectMenuBuilder()
-    .setCustomId(`class_select:${userId}`)
-    .setPlaceholder('Choose your class...')
-    .addOptions(options);
-
-  const row = new ActionRowBuilder().addComponents(selectMenu);
-  return { embeds: [embed], components: [row] };
-}
-
 function determineUserTier(member) {
   const r = roles();
   if (r.baseVet && member.roles.cache.has(r.baseVet)) return 'vet';
@@ -139,10 +115,18 @@ export async function execute(interaction) {
       const flavor = customId.split(':')[1]; // 'lgbt' or 'ally'
       const r = roles();
       
-      // Add flair role only (no tier role for stray spores)
+      // Check if user already has the flair role to prevent duplicates
       const roleId = flavor === 'lgbt' ? r.flairL : r.flairA;
       const roleName = flavor === 'lgbt' ? 'LGBTQIA2S+' : 'Ally';
       
+      if (roleId && member.roles.cache.has(roleId)) {
+        return interaction.reply({
+          content: `✅ You already have the **${roleName}** flair role!`,
+          ephemeral: true
+        });
+      }
+      
+      // Add flair role only (stray spore role should already be added on entry via invite)
       if (roleId) {
         try {
           await member.roles.add(roleId);
@@ -152,15 +136,6 @@ export async function execute(interaction) {
             content: `⚠️ Failed to assign ${roleName} role. Please contact a moderator.`, 
             ephemeral: true 
           });
-        }
-      }
-      
-      // Add Stray Spore role
-      if (r.stray) {
-        try {
-          await member.roles.add(r.stray);
-        } catch (err) {
-          console.error('[visitor-decree] Failed to add Stray Spore role:', err);
         }
       }
       
@@ -179,6 +154,25 @@ export async function execute(interaction) {
     // ===== CHAMBER OF OATHS: Imperial Decree (Full Members) =====
     if (interaction.isButton() && channelId === CHANNELS.CHAMBER_OF_OATHS && customId?.startsWith('flair:')) {
       const flavor = customId.split(':')[1]; // 'lgbt' or 'ally'
+      
+      // Check if user has appropriate base role
+      const tier = determineUserTier(member);
+      if (!tier) {
+        return interaction.reply({
+          content: '❌ You need a base role (Member/Officer/Veteran) before taking the oath. Contact an administrator.',
+          flags: MessageFlags.Ephemeral,
+        });
+      }
+
+      // Check if they already have the final role
+      const r = roles();
+      const finalRoleId = r.final[`${tier}:${flavor}`];
+      if (finalRoleId && member.roles.cache.has(finalRoleId)) {
+        return interaction.reply({
+          content: '✅ You have already completed the oath ceremony with this flair!',
+          flags: MessageFlags.Ephemeral,
+        });
+      }
       
       // Show character name modal for oath ceremony
       const modal = createCharacterNameModal(flavor);
@@ -202,7 +196,7 @@ export async function execute(interaction) {
         });
       }
 
-      // Determine user's tier
+      // Determine user's tier (double-check)
       const tier = determineUserTier(member);
       if (!tier) {
         return interaction.reply({
@@ -211,7 +205,7 @@ export async function execute(interaction) {
         });
       }
 
-      // Store character info (check if exists first)
+      // Check for duplicate character name
       const userId = member.id;
       if (CharacterDB.characterExists(userId, characterName)) {
         return interaction.reply({
@@ -268,43 +262,46 @@ export async function execute(interaction) {
 
       const r = roles();
       
-      // Add flair role
+      // Add flair role (if they don't already have it)
       const flairRoleId = flavor === 'lgbt' ? r.flairL : r.flairA;
-      if (flairRoleId) {
+      if (flairRoleId && !member.roles.cache.has(flairRoleId)) {
         try {
           await member.roles.add(flairRoleId);
+          console.log(`[oath] Added ${flavor} flair role to ${member.user.tag}`);
         } catch (err) {
           console.error('Failed to add flair role:', err);
         }
       }
 
-      // Add final tier role and remove base role
+      // Add final tier role
       const finalRoleId = r.final[`${tier}:${flavor}`];
-      const baseRoleId = tier === 'mem' ? r.baseMem : tier === 'off' ? r.baseOff : r.baseVet;
-      
-      if (finalRoleId) {
+      if (finalRoleId && !member.roles.cache.has(finalRoleId)) {
         try {
           await member.roles.add(finalRoleId);
+          console.log(`[oath] Added final role ${tier}:${flavor} to ${member.user.tag}`);
         } catch (err) {
           console.error('Failed to add final role:', err);
         }
       }
 
       // Remove base role
-      if (baseRoleId) {
+      const baseRoleId = tier === 'mem' ? r.baseMem : tier === 'off' ? r.baseOff : r.baseVet;
+      if (baseRoleId && member.roles.cache.has(baseRoleId)) {
         try {
           await member.roles.remove(baseRoleId);
+          console.log(`[oath] Removed base ${tier} role from ${member.user.tag}`);
         } catch (err) {
           console.error('Failed to remove base role:', err);
         }
       }
 
-      // Remove stray spore role if they have it
-      if (r.stray) {
+      // Remove stray spore role if they have it (shouldn't happen but good cleanup)
+      if (r.stray && member.roles.cache.has(r.stray)) {
         try {
           await member.roles.remove(r.stray);
+          console.log(`[oath] Removed stray spore role from ${member.user.tag}`);
         } catch (err) {
-          // Ignore - they might not have had it
+          console.error('Failed to remove stray spore role:', err);
         }
       }
 
@@ -321,7 +318,12 @@ export async function execute(interaction) {
     // ===== ADDALT INTERACTIONS =====
     if (interaction.isStringSelectMenu() && customId?.startsWith('addalt_class:')) {
       const userId = customId.split(':')[1];
-      if (userId !== interaction.user.id) return;
+      if (userId !== interaction.user.id) {
+        return interaction.reply({
+          content: 'This selection menu is not for you.',
+          flags: MessageFlags.Ephemeral
+        });
+      }
       
       const selectedClass = interaction.values[0];
       const modal = addaltCommand.createAddAltModal(selectedClass, userId);
@@ -330,24 +332,133 @@ export async function execute(interaction) {
 
     if (interaction.isModalSubmit() && customId?.startsWith('addalt_modal:')) {
       const [, userId, selectedClass] = customId.split(':');
-      if (userId !== interaction.user.id) return;
+      if (userId !== interaction.user.id) {
+        return interaction.reply({
+          content: 'This modal is not for you.',
+          flags: MessageFlags.Ephemeral
+        });
+      }
 
-      // Handle addalt modal submission logic here...
-      // (This is the same logic from your existing code)
+      // Use the correct field names from the addalt modal
+      const characterName = interaction.fields.getTextInputValue('character_name').trim();
+      const characterRealm = interaction.fields.getTextInputValue('character_realm')?.trim() || null;
+      const isMainInput = interaction.fields.getTextInputValue('is_main')?.trim().toLowerCase();
+      const isMain = isMainInput === 'yes' || isMainInput === 'y';
+      
+      // Validate character name
+      const nameRegex = /^[a-zA-ZÀ-ÿ\s'\-]+$/;
+      if (!nameRegex.test(characterName)) {
+        return interaction.reply({
+          content: '⛔ Character names can only contain letters, spaces, apostrophes, and hyphens.',
+          flags: MessageFlags.Ephemeral,
+        });
+      }
+
+      // Check if character already exists
+      if (CharacterDB.characterExists(userId, characterName)) {
+        return interaction.reply({
+          content: `⛔ You already have a character named **${characterName}** registered.`,
+          flags: MessageFlags.Ephemeral,
+        });
+      }
+
+      // Add character
+      const displayClass = selectedClass === 'none' ? null : selectedClass;
+      CharacterDB.addCharacter(userId, characterName, displayClass, characterRealm, isMain);
+
+      // If this is their new main, update nickname
+      if (isMain) {
+        try {
+          await member.setNickname(characterName);
+        } catch (error) {
+          console.log(`No permission to set nickname for ${member.user.tag}:`, error.message);
+        }
+      }
+
+      const classText = displayClass ? ` ${displayClass}` : '';
+      const mainText = isMain ? ' as your **main character**' : ' as an **alt character**';
+      
+      return interaction.reply({
+        content: `✅ **${characterName}**${classText} has been registered${mainText}!`,
+        flags: MessageFlags.Ephemeral,
+      });
     }
 
     // ===== DELETE CHARACTER BUTTONS =====
     if (interaction.isButton() && customId?.startsWith('confirm_delete:')) {
-      // Handle character deletion confirmation...
-      // (This is the same logic from your existing code)
+      const [, userId, encodedCharacterName] = customId.split(':', 3);
+      if (userId !== interaction.user.id) {
+        return interaction.reply({
+          content: 'This action is not for you.',
+          flags: MessageFlags.Ephemeral
+        });
+      }
+
+      const characterName = decodeURIComponent(encodedCharacterName);
+
+      // Check if character exists and get info
+      const character = CharacterDB.getCharacter(userId, characterName);
+      if (!character) {
+        return interaction.update({
+          content: `❌ Character **${characterName}** not found.`,
+          components: [],
+        });
+      }
+
+      // Delete the character
+      CharacterDB.removeCharacter(userId, characterName);
+
+      // If this was their main character, we might need to update nickname
+      if (character.isMain) {
+        try {
+          // Try to set nickname to another character or clear it
+          const remainingChars = CharacterDB.getCharacters(userId);
+          if (remainingChars.length > 0) {
+            await member.setNickname(remainingChars[0].name);
+          } else {
+            await member.setNickname(null); // Clear nickname
+          }
+        } catch (error) {
+          console.log(`No permission to update nickname for ${member.user.tag}:`, error.message);
+        }
+      }
+
+      return interaction.update({
+        content: `🗑️ **${characterName}** has been deleted from your character list.`,
+        components: [],
+      });
     }
 
     if (interaction.isButton() && customId?.startsWith('cancel_delete:')) {
       return interaction.update({
         content: '❌ Character deletion cancelled.',
         components: [],
-        flags: MessageFlags.Ephemeral
       });
+    }
+
+    // ===== SLASH COMMANDS =====
+    if (interaction.isChatInputCommand()) {
+      const command = interaction.client.commands.get(interaction.commandName);
+      if (!command) {
+        console.error(`No command matching ${interaction.commandName} was found.`);
+        return;
+      }
+
+      try {
+        await command.execute(interaction);
+      } catch (error) {
+        console.error('Error executing command:', error);
+        const errorMessage = { 
+          content: 'There was an error while executing this command!', 
+          flags: MessageFlags.Ephemeral 
+        };
+        
+        if (interaction.replied || interaction.deferred) {
+          await interaction.followUp(errorMessage);
+        } else {
+          await interaction.reply(errorMessage);
+        }
+      }
     }
 
   } catch (error) {

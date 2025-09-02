@@ -54,6 +54,19 @@ function createWelcomeDM(member, tier, flavor) {
     .setThumbnail(member.user.displayAvatarURL())
     .addFields([
       {
+        name: '🎭 Character Management',
+        value: [
+          'Manage your WoW character roster with these commands:',
+          '• `/addalt` - Register additional characters with class selection',
+          '• `/roster` - View all your registered characters',
+          '• `/switch` - Change your active character (updates nickname)',
+          '• `/deletealt` - Remove characters from your roster',
+          '',
+          '*Your main character was set during the oath ceremony. Use `/switch` to change between characters anytime!*'
+        ].join('\n'),
+        inline: false,
+      },
+      {
         name: '🌿 Stray Spore Invites',
         value: [
           'Use `/strays` to generate guest passes for friends:',
