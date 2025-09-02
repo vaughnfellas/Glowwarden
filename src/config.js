@@ -29,6 +29,10 @@ export const config = {
   CLIENT_ID: process.env.CLIENT_ID || '',
   GUILD_ID: snowflake(process.env.GUILD_ID),
 
+  // Owner IDs
+  OWNER_IDS: process.env.OWNER_IDS?.split(',').map(id => id.trim()) || [],
+  OWNER_ID: process.env.OWNER_IDS?.split(',')[0]?.trim() || '', // First owner for backward compatibility
+
   // Channels (migrated to use CHANNELS mapping)
   SPORE_BOX_CHANNEL_ID: CHANNELS.SPORE_BOX,
   DECREE_CHANNEL_ID: CHANNELS.CHAMBER_OF_OATHS,

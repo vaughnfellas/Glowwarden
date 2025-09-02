@@ -10,6 +10,7 @@ import * as permsCommand from './perms.js';
 import * as visitorDecreeCommand from '../services/visitor-decree-service.js';
 import * as addaltCommand from './addalt.js';
 import * as glowwarden from './glowwarden.js';
+import * as statusCommand from './status.js';
 
 import { CharacterDB } from '../database/characters.js';
 
@@ -23,8 +24,9 @@ export const commands = new Map([
   [idsCommand.data.name, idsCommand],
   [permsCommand.data.name, permsCommand],
   [visitorDecreeCommand.data.name, visitorDecreeCommand],
+  [statusCommand.data.name, statusCommand],
 
-  // pseudo-commands implemented inside addalt.js
+  // pseudo-commands implemented inside addalt.js and status.js
   [addaltCommand.data.name, addaltCommand],
   [addaltCommand.switchData.name, {
     execute: addaltCommand.executeSwitch,
@@ -36,6 +38,9 @@ export const commands = new Map([
   [addaltCommand.deleteAltData.name, {
     execute: addaltCommand.executeDeleteAlt,
     autocomplete: addaltCommand.autocompleteDeleteCharacters,
+  }],
+  [statusCommand.pingData.name, {
+    execute: statusCommand.executePing,
   }],
 ]);
 
@@ -160,7 +165,7 @@ export function loadCommands(client) {
         }
 
         if (interaction.customId.startsWith('cancel_delete:')) {
-          return interaction.update({ content: '⏹ Character deletion cancelled.', components: [], flags: MessageFlags.Ephemeral });
+          return interaction.update({ content: '↩ Character deletion cancelled.', components: [], flags: MessageFlags.Ephemeral });
         }
 
         return;

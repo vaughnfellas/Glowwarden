@@ -2,6 +2,7 @@
 import { SlashCommandBuilder, EmbedBuilder, PermissionFlagsBits } from 'discord.js';
 import { config } from '../config.js';
 import { createRoleInvite, logInviteCreation, getActiveTrackedInvites, revokeTrackedInvite } from '../services/invite-service.js';
+import { isOwner } from '../utils/owner.js';
 
 export const data = new SlashCommandBuilder()
   .setName('generate-invite')
@@ -68,8 +69,8 @@ export const data = new SlashCommandBuilder()
 export async function execute(interaction) {
   const subcommand = interaction.options.getSubcommand();
 
-  // Owner-only check for officer/veteran invites
-  if ((subcommand === 'officer' || subcommand === 'veteran') && interaction.user.id !== config.OWNER_ID) {
+  // Owner-only check for officer/veteran invites - FIXED: Use proper isOwner function
+  if ((subcommand === 'officer' || subcommand === 'veteran') && !isOwner(interaction.user.id)) {
     return interaction.reply({
       content: 'Only the server owner can generate Officer and Veteran invites.',
       ephemeral: true

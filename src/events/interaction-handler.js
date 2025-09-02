@@ -205,17 +205,17 @@ export async function execute(interaction) {
         });
       }
 
-      // Check for duplicate character name
+      // Check for duplicate character name - FIXED: Added await
       const userId = member.id;
-      if (CharacterDB.characterExists(userId, characterName)) {
+      if (await CharacterDB.characterExists(userId, characterName)) {
         return interaction.reply({
           content: `⛔ You already have a character named **${characterName}** registered.`,
           flags: MessageFlags.Ephemeral,
         });
       }
 
-      // Add character to database
-      CharacterDB.addCharacter(userId, characterName, characterClass, characterRealm, true); // Main character
+      // Add character to database - FIXED: Added await
+      await CharacterDB.addCharacter(userId, characterName, characterClass, characterRealm, true); // Main character
 
       // Set nickname
       try {
@@ -354,17 +354,17 @@ export async function execute(interaction) {
         });
       }
 
-      // Check if character already exists
-      if (CharacterDB.characterExists(userId, characterName)) {
+      // Check if character already exists - FIXED: Added await
+      if (await CharacterDB.characterExists(userId, characterName)) {
         return interaction.reply({
           content: `⛔ You already have a character named **${characterName}** registered.`,
           flags: MessageFlags.Ephemeral,
         });
       }
 
-      // Add character
+      // Add character - FIXED: Added await
       const displayClass = selectedClass === 'none' ? null : selectedClass;
-      CharacterDB.addCharacter(userId, characterName, displayClass, characterRealm, isMain);
+      await CharacterDB.addCharacter(userId, characterName, displayClass, characterRealm, isMain);
 
       // If this is their new main, update nickname
       if (isMain) {
@@ -396,8 +396,8 @@ export async function execute(interaction) {
 
       const characterName = decodeURIComponent(encodedCharacterName);
 
-      // Check if character exists and get info
-      const character = CharacterDB.getCharacter(userId, characterName);
+      // Check if character exists and get info - FIXED: Added await
+      const character = await CharacterDB.getCharacter(userId, characterName);
       if (!character) {
         return interaction.update({
           content: `❌ Character **${characterName}** not found.`,
@@ -405,14 +405,14 @@ export async function execute(interaction) {
         });
       }
 
-      // Delete the character
-      CharacterDB.removeCharacter(userId, characterName);
+      // Delete the character - FIXED: Added await
+      await CharacterDB.removeCharacter(userId, characterName);
 
       // If this was their main character, we might need to update nickname
       if (character.isMain) {
         try {
-          // Try to set nickname to another character or clear it
-          const remainingChars = CharacterDB.getCharacters(userId);
+          // Try to set nickname to another character or clear it - FIXED: Added await
+          const remainingChars = await CharacterDB.getCharacters(userId);
           if (remainingChars.length > 0) {
             await member.setNickname(remainingChars[0].name);
           } else {
