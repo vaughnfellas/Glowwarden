@@ -4,13 +4,12 @@ import { REST, Routes, SlashCommandBuilder } from 'discord.js';
 import { data as decreeData } from './commands/decree.js';
 import { data as idsData } from './commands/ids.js';
 import { data as permsData } from './commands/perms.js';
-import { data as visitorDecreeData } from './services/visitor-decree-service.js';
 import { data as addaltData, switchData, rosterData, deleteAltData } from './commands/addalt.js';
 import { data as generateInviteData } from './commands/generate-invite.js';
 import { data as glowwardenData } from './commands/glowwarden.js';
 import { data as statusData } from './commands/status.js';
 import { data as pingData } from './commands/ping.js';
-
+import { data as vcStatusData } from './commands/vc-status.js';
 
 // Helper: basic snowflake validator (17–20 digit ID)
 const SNOWFLAKE = v => /^\d{17,20}$/.test(String(v || '').trim());
@@ -31,32 +30,35 @@ if (GUILD_ID && !SNOWFLAKE(GUILD_ID)) {
 // --- Build your commands ---
 const straysCmd = new SlashCommandBuilder()
   .setName('strays')
-  .setDescription('Conjure guest passes to #spore-box (24h)')
+  .setDescription('[Optional] Manual Stray invite - War Chambers auto-generate these!')
   .addIntegerOption(opt =>
-    opt.setName('count')
-      .setDescription('Number of guest passes (default 4, max 10)')
+    opt.setName('uses')
+      .setDescription('Number of uses (default unlimited, max 25)')
       .setMinValue(1)
-      .setMaxValue(10)
+      .setMaxValue(25)
+  )
+  .addStringOption(opt =>
+    opt.setName('reason')
+      .setDescription('Reason for this manual invite')
   );
 
 const vcCmd = new SlashCommandBuilder()
   .setName('vc')
-  .setDescription('Move yourself to your host\'s War Chamber')
+  .setDescription('Create/join War Chamber (auto-generates Stray Spore invites)')
   .addStringOption(o =>
     o.setName('host')
-      .setDescription('Pick your host (current War Chamber owner)')
+      .setDescription('Join existing War Chamber by host name (leave empty to create your own)')
       .setAutocomplete(true)
-      .setRequired(true)
   );
 
 // Include ALL commands in the deployment
 const commands = [
   straysCmd, 
   vcCmd, 
+  vcStatusData,
   decreeData, 
   idsData, 
   permsData, 
-  visitorDecreeData,
   addaltData,
   switchData,
   rosterData,

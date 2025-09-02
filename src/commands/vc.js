@@ -1,132 +1,188 @@
 // ============= src/commands/vc.js =============
-import { SlashCommandBuilder, ChannelType, MessageFlags } from 'discord.js';
-import { config } from '../config.js';
+import { SlashCommandBuilder, MessageFlags } from 'discord.js';
+import { tempOwners, createTempVCFor, getTempVCInviteInfo } from '../services/temp-vc-service.js';
 import { CHANNELS } from '../channels.js';
-import { tempOwners } from '../services/temp-vc-service.js';
 
 export const data = new SlashCommandBuilder()
   .setName('vc')
-  .setDescription('Move to a host\'s War Chamber')
+  .setDescription('Create/join War Chamber (auto-generates Stray Spore invites)')
   .addStringOption(option =>
-    option.setName('host')
-      .setDescription('The host whose chamber you want to join')
-      .setRequired(true)
+    option
+      .setName('host')
+      .setDescription('Join existing War Chamber by host name (leave empty to create your own)')
       .setAutocomplete(true)
   );
 
 export async function execute(interaction) {
-  const hostId = interaction.options.getString('host', true);
+  const hostInput = interaction.options.getString('host');
   const member = interaction.member;
+  const guild = interaction.guild;
 
-  // Check if user is in a voice channel
-  const vs = member.voice;
-  if (!vs?.channelId) {
-    await interaction.reply({ content: '⛔ Join a voice channel first, then use /vc.', flags: MessageFlags.Ephemeral });
-    return;
-  }
-  
-  // Check if user is a Stray Spore (needs to be in Sporehall specifically)
-  const isStraySpore = member.roles.cache.has(process.env.STRAY_SPORE_ROLE_ID || '');
-  if (isStraySpore && CHANNELS.SPOREHALL && vs.channelId !== CHANNELS.SPOREHALL) {
-    await interaction.reply({ content: '⚠️ As a guest, please join *Sporehall* first, then use /vc.', flags: MessageFlags.Ephemeral });
-    return;
+  // If no host specified, create their own War Chamber
+  if (!hostInput) {
+    // Check if they already have a War Chamber
+    const existingVC = [...tempOwners.entries()].find(([channelId, ownerId]) => ownerId === member.id);
+    
+    if (existingVC) {
+      const [channelId] = existingVC;
+      const channel = guild.channels.cache.get(channelId);
+      const inviteInfo = getTempVCInviteInfo(channelId);
+      
+      if (channel && inviteInfo) {
+        return interaction.reply({
+          content: [
+            `You already have an active War Chamber: **${channel.name}**`,
+            `Your auto-generated invite: \`${inviteInfo.url}\``,
+            `Share this link to bring friends directly to your chamber as Stray Spores!`
+          ].join('\n'),
+          flags: MessageFlags.Ephemeral
+        });
+      }
+    }
+
+    // Create new War Chamber
+    try {
+      await interaction.deferReply({ ephemeral: true });
+      
+      await createTempVCFor(member);
+      
+      return interaction.editReply({
+        content: [
+          '🏰 **War Chamber created!**',
+          'You\'ve been moved to your new chamber and an invite has been auto-generated.',
+          'Check the text channel in your War Chamber for the Stray Spore invite link!',
+          '',
+          '💡 **Tip:** Use `/vc-status` to see your invite link anytime.'
+        ].join('\n')
+      });
+      
+    } catch (error) {
+      console.error('Failed to create War Chamber:', error);
+      return interaction.editReply('❌ Failed to create War Chamber. Please try again.');
+    }
   }
 
-  // Find the chamber for the selected host
-  const entry = [...tempOwners.entries()].find(([, owner]) => owner === hostId);
-  if (!entry) {
-    await interaction.reply({ content: '⛔ I can\'t find a War Chamber for that host right now.', flags: MessageFlags.Ephemeral });
-    return;
-  }
-
-  const [chamberId] = entry;
-  const chamber = await interaction.guild.channels.fetch(chamberId).catch(() => null);
-  if (!chamber || chamber.type !== ChannelType.GuildVoice) {
-    await interaction.reply({ content: '⛔ That War Chamber doesn\'t seem to exist anymore.', flags: MessageFlags.Ephemeral });
-    return;
-  }
-
+  // Join existing War Chamber
   try {
-    await member.voice.setChannel(chamber);
-    await interaction.reply({ content: `✅ Moved you to **${chamber.name}**.`, flags: MessageFlags.Ephemeral });
-  } catch (e) {
-    console.error('vc move failed:', e);
-    await interaction.reply({
-      content: '⛔ I couldn\'t move you. I need *Move Members* in both channels.',
-      flags: MessageFlags.Ephemeral,
+    const battlefront = guild.channels.cache.get(CHANNELS.BATTLEFRONT);
+    if (!battlefront) {
+      return interaction.reply({
+        content: '❌ Battlefront category not found.',
+        flags: MessageFlags.Ephemeral
+      });
+    }
+
+    // Find matching host
+    const tempVCs = battlefront.children.cache.filter(ch => 
+      ch.type === 2 && // GuildVoice
+      tempOwners.has(ch.id)
+    );
+
+    let targetVC = null;
+    
+    // Try exact match first
+    for (const [channelId, channel] of tempVCs) {
+      const ownerId = tempOwners.get(channelId);
+      try {
+        const owner = await guild.members.fetch(ownerId).catch(() => null);
+        if (owner && owner.displayName.toLowerCase().includes(hostInput.toLowerCase())) {
+          targetVC = { channel, owner };
+          break;
+        }
+      } catch (error) {
+        continue;
+      }
+    }
+
+    if (!targetVC) {
+      return interaction.reply({
+        content: `❌ No War Chamber found for host "${hostInput}". Use autocomplete to see available hosts.`,
+        flags: MessageFlags.Ephemeral
+      });
+    }
+
+    // Check if user is already in voice
+    if (!member.voice.channelId) {
+      return interaction.reply({
+        content: '❌ You need to be in a voice channel first. Join Sporehall or any voice channel, then use this command.',
+        flags: MessageFlags.Ephemeral
+      });
+    }
+
+    // Move them to the target VC
+    try {
+      await member.voice.setChannel(targetVC.channel);
+      
+      return interaction.reply({
+        content: `✅ Moved you to **${targetVC.owner.displayName}**'s War Chamber!`,
+        flags: MessageFlags.Ephemeral
+      });
+      
+    } catch (error) {
+      return interaction.reply({
+        content: '❌ Failed to move you to the War Chamber. You may not have permission to join.',
+        flags: MessageFlags.Ephemeral
+      });
+    }
+    
+  } catch (error) {
+    console.error('VC command error:', error);
+    return interaction.reply({
+      content: '❌ Something went wrong. Please try again.',
+      flags: MessageFlags.Ephemeral
     });
   }
 }
 
 export async function autocomplete(interaction) {
-  const focused = (interaction.options.getFocused() || '').toLowerCase();
-  const guild = interaction.guild;
-  const choices = [];
-  
-  // First, try to get hosts from temp war chambers
-  const tempHostEntries = [...tempOwners.entries()];
-  
-  if (tempHostEntries.length > 0) {
-    console.log(`[vc] Found ${tempHostEntries.length} temp war chambers`);
+  try {
+    const guild = interaction.guild;
+    const battlefront = guild.channels.cache.get(CHANNELS.BATTLEFRONT);
     
-    // Process temp chamber owners
-    for (const [chamberId, ownerId] of tempHostEntries) {
-      try {
-        // Try to get the channel name for context
-        const channel = await guild.channels.fetch(chamberId).catch(() => null);
-        const channelName = channel?.name || "War Chamber";
-        
-        // Try to get the member's server nickname
-        const member = await guild.members.fetch(ownerId).catch(() => null);
-        const displayName = member?.displayName || member?.user?.username || "Unknown Host";
-        
-        // Only add if it matches the search or there's no search yet
-        if (!focused || displayName.toLowerCase().includes(focused)) {
-          choices.push({ 
-            name: `${displayName} (${channelName})`, 
-            value: ownerId 
-          });
-        }
-      } catch (err) {
-        console.error(`[vc] Error processing temp host ${ownerId}:`, err);
-        // Still add as a fallback with just the ID
-        if (!focused || ownerId.includes(focused)) {
-          choices.push({ name: `Host ID: ${ownerId}`, value: ownerId });
-        }
-      }
+    if (!battlefront) {
+      return interaction.respond([]);
     }
-  } else {
-    console.log('[vc] No temp war chambers found, falling back to host role');
+
+    const focusedValue = interaction.options.getFocused().toLowerCase();
     
-    // Fallback: If no temp chambers, look for users with the host role
-    try {
-      const hostRole = guild.roles.cache.find(r => 
-        r.name.toLowerCase().includes('host') || 
-        (process.env.HOST_ROLE_ID && r.id === process.env.HOST_ROLE_ID)
-      );
-      
-      if (hostRole) {
-        const hosts = hostRole.members.map(m => ({
-          id: m.id,
-          displayName: m.displayName // Use displayName instead of username
-        }));
-        
-        for (const host of hosts) {
-          if (!focused || host.displayName.toLowerCase().includes(focused)) {
-            choices.push({ name: host.displayName, value: host.id });
+    // Get all temp VCs and their owners
+    const choices = [];
+    const tempVCs = battlefront.children.cache.filter(ch => 
+      ch.type === 2 && // GuildVoice
+      tempOwners.has(ch.id)
+    );
+
+    for (const [channelId, channel] of tempVCs) {
+      const ownerId = tempOwners.get(channelId);
+      try {
+        const owner = await guild.members.fetch(ownerId).catch(() => null);
+        if (owner) {
+          const memberCount = channel.members.size;
+          const displayName = owner.displayName;
+          
+          if (displayName.toLowerCase().includes(focusedValue)) {
+            choices.push({
+              name: `${displayName} (${memberCount} members)`,
+              value: displayName
+            });
           }
         }
+      } catch (error) {
+        continue;
       }
-    } catch (err) {
-      console.error('[vc] Error fetching host role members:', err);
     }
+
+    // Sort by member count (more active chambers first)
+    choices.sort((a, b) => {
+      const aCount = parseInt(a.name.match(/\((\d+) members\)/)[1]);
+      const bCount = parseInt(b.name.match(/\((\d+) members\)/)[1]);
+      return bCount - aCount;
+    });
+
+    return interaction.respond(choices.slice(0, 25));
+    
+  } catch (error) {
+    console.error('VC autocomplete error:', error);
+    return interaction.respond([]);
   }
-  
-  // If still no choices, add a helpful message
-  if (choices.length === 0) {
-    choices.push({ name: "No hosts available right now", value: "no_host" });
-  }
-  
-  // Limit to 25 choices as per Discord's limit
-  await interaction.respond(choices.slice(0, 25));
 }

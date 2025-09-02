@@ -1,6 +1,8 @@
+// ============= src/services/invite-role-service.js =============
 import { Events, PermissionFlagsBits } from 'discord.js';
 import { config } from '../config.js';
 import { CHANNELS } from '../channels.js';
+import { handleTempVCInviteJoin } from './temp-vc-service.js';
 
 const cache = new Map(); // guildId -> Map<code, uses>
 
@@ -31,12 +33,20 @@ function diffUsedInvite(oldMap, newMap) {
 }
 
 async function assignRoleForCode(member, code) {
-  const roleId = config.INVITE_ROLE_MAP[code] || config.INVITE_DEFAULT_ROLE_ID;
-  if (!roleId) return { assigned: false };
+  // First, try the temp VC invite system
+  if (code && await handleTempVCInviteJoin(member, code)) {
+    return { assigned: true, type: 'temp_vc', roleId: config.STRAY_SPORE_ROLE_ID };
+  }
+  
+  // Fallback to traditional role mapping (for any remaining invite types)
+  const roleId = config.INVITE_ROLE_MAP?.[code] || config.INVITE_DEFAULT_ROLE_ID;
+  if (!roleId) return { assigned: false, type: 'none' };
+  
   const role = member.guild.roles.cache.get(roleId);
-  if (!role) return { assigned: false };
+  if (!role) return { assigned: false, type: 'mapping' };
+  
   await member.roles.add(role).catch(() => {});
-  return { assigned: true, roleId };
+  return { assigned: true, type: 'mapping', roleId };
 }
 
 export function initInviteRoleService(client) {
@@ -70,13 +80,20 @@ export function initInviteRoleService(client) {
 
       const res = await assignRoleForCode(member, code || '__default__');
 
+      // Enhanced logging based on invite type
       const ch = g.channels.cache.get(CHANNELS.HALL_OF_RECORDS);
       if (ch?.isTextBased()) {
-        ch.send(
-          code
-            ? `🧭 ${member} joined via \`${code}\`${res.assigned ? ` → role <@&${res.roleId}>` : ''}`
-            : `🧭 ${member} joined (invite unknown)${res.assigned ? ` → default <@&${res.roleId}>` : ''}`
-        ).catch(() => {});
+        let logMessage;
+        
+        if (res.type === 'temp_vc') {
+          logMessage = `🏰 ${member} joined via War Chamber invite \`${code}\` → auto-assigned Stray Spore <@&${res.roleId}>`;
+        } else if (code) {
+          logMessage = `🧭 ${member} joined via \`${code}\`${res.assigned ? ` → role <@&${res.roleId}>` : ''}`;
+        } else {
+          logMessage = `🧭 ${member} joined (invite unknown)${res.assigned ? ` → default <@&${res.roleId}>` : ''}`;
+        }
+        
+        ch.send(logMessage).catch(() => {});
       }
     } catch (e) {
       console.warn('invite-role service error:', e?.message);
