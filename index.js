@@ -86,9 +86,11 @@ client.login(token)
   })
   .catch(err => {
     console.error('❌ Discord login failed:');
+    console.error('Error name:', err.name);
     console.error('Error message:', err.message);
     console.error('Error code:', err.code);
-    console.error('Full error:', err);
+    console.error('HTTP status:', err.httpStatus);
+    console.error('Full error:', JSON.stringify(err, null, 2));
     process.exit(1);
   });
 
