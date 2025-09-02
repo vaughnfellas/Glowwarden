@@ -1,10 +1,12 @@
 // ============= index.js (main entry point) =============
-
+// index.js — must be first lines
+import dotenv from 'dotenv';
+dotenv.config({ path: '.env', override: true });
 // Global error handlers
 process.on('unhandledRejection', (err) => console.error('Unhandled promise rejection:', err));
 process.on('uncaughtException', (err) => console.error('Uncaught exception:', err));
 
-import 'dotenv/config';
+
 import { Client, GatewayIntentBits } from 'discord.js';
 
 import { CHANNELS } from './src/channels.js';
