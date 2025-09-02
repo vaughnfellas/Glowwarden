@@ -93,7 +93,7 @@ export const rosterData = new SlashCommandBuilder()
 
 export async function executeRoster(interaction) {
 const userId = interaction.user.id;
-const characters = CharacterDB.getCharacters(userId);
+const characters = await CharacterDB.getCharacters(userId); // FIXED: Added await
 
 if (characters.length === 0) {
   return interaction.reply({
@@ -131,14 +131,14 @@ export async function executeDeleteAlt(interaction) {
 const characterName = interaction.options.getString('character', true);
 const userId = interaction.user.id;
 
-if (!CharacterDB.characterExists(userId, characterName)) {
+if (!(await CharacterDB.characterExists(userId, characterName))) { // FIXED: Added await
   return interaction.reply({
     content: `⛔ You don't have a character named **${characterName}**.`,
     flags: MessageFlags.Ephemeral,
   });
 }
 
-const character = CharacterDB.getCharacter(userId, characterName);
+const character = await CharacterDB.getCharacter(userId, characterName); // FIXED: Added await
 
 // Create confirmation buttons
 const row = new ActionRowBuilder()
@@ -179,7 +179,7 @@ const characterChoice = interaction.options.getString('character', true);
 const member = interaction.member;
 const userId = member.user.id;
 
-const characters = CharacterDB.getCharacters(userId);
+const characters = await CharacterDB.getCharacters(userId); // FIXED: Added await
 if (characters.length === 0) {
   return interaction.reply({
     content: '⛔ You haven\'t registered any characters yet. Use `/addalt` to register characters.',
@@ -232,7 +232,7 @@ ${character.isMain ?
 export async function autocompleteSwitchCharacters(interaction) {
 const focused = (interaction.options.getFocused() || '').toLowerCase();
 const userId = interaction.user.id;
-const characters = CharacterDB.getCharacters(userId);
+const characters = await CharacterDB.getCharacters(userId); // FIXED: Added await
 
 if (characters.length === 0) {
   return interaction.respond([

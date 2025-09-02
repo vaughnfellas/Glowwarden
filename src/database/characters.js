@@ -1,105 +1,85 @@
-// ============= src/database/characters.js =============
-import Database from 'better-sqlite3';
-import path from 'path';
+// src/database/characters.js
+// Drop-in replacement for the old SQLite CharacterDB.
+// Same API: addCharacter, getCharacters, characterExists, getCharacter, removeCharacter, close
+import { query, pool } from '../db.js';
 
-// Create/open database file
-const db = new Database(path.join(process.cwd(), 'characters.db'));
-
-// Create table if it doesn't exist
-db.exec(`
-  CREATE TABLE IF NOT EXISTS characters (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    user_id TEXT NOT NULL,
-    name TEXT NOT NULL,
-    class TEXT,
-    realm TEXT,
-    is_main BOOLEAN DEFAULT 0,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE(user_id, name)
-  )
-`);
-
-// Prepared statements for better performance
-const statements = {
-  addCharacter: db.prepare(`
-    INSERT INTO characters (user_id, name, class, realm, is_main)
-    VALUES (?, ?, ?, ?, ?)
-  `),
-  
-  getCharacters: db.prepare(`
-    SELECT * FROM characters 
-    WHERE user_id = ? 
-    ORDER BY is_main DESC, created_at ASC
-  `),
-  
-  characterExists: db.prepare(`
-    SELECT COUNT(*) as count 
-    FROM characters 
-    WHERE user_id = ? AND LOWER(name) = LOWER(?)
-  `),
-  
-  unmarkAllMains: db.prepare(`
-    UPDATE characters 
-    SET is_main = 0 
-    WHERE user_id = ?
-  `),
-  
-  removeCharacter: db.prepare(`
-    DELETE FROM characters 
-    WHERE user_id = ? AND LOWER(name) = LOWER(?)
-  `),
-  
-  getCharacter: db.prepare(`
-    SELECT * FROM characters 
-    WHERE user_id = ? AND LOWER(name) = LOWER(?)
-  `)
-};
-
-export class CharacterDB {
-  static addCharacter(userId, name, charClass, realm, isMain = false) {
-    // If setting as main, unmark all others first
+export const CharacterDB = {
+  async addCharacter(userId, name, charClass, realm, isMain) {
     if (isMain) {
-      statements.unmarkAllMains.run(userId);
+      await query('UPDATE public.characters SET is_main = false WHERE user_id = $1', [userId]);
     }
+    await query(
+      `INSERT INTO public.characters (user_id, name, class, realm, is_main)
+       VALUES ($1, $2, $3, $4, $5)
+       ON CONFLICT (user_id, name) DO UPDATE
+         SET class = EXCLUDED.class,
+             realm = EXCLUDED.realm,
+             is_main = EXCLUDED.is_main`,
+      [userId, name, charClass || null, realm || null, !!isMain]
+    );
+  },
 
-    return statements.addCharacter.run(userId, name, charClass, realm, isMain ? 1 : 0);
-  }
-
-  static getCharacters(userId) {
-    return statements.getCharacters.all(userId).map(char => ({
-      name: char.name,
-      class: char.class,
-      realm: char.realm,
-      isMain: char.is_main === 1,
-      createdAt: char.created_at
+  async getCharacters(userId) {
+    const { rows } = await query(
+      `SELECT id, user_id, name, class, realm, is_main, created_at
+         FROM public.characters
+        WHERE user_id = $1
+     ORDER BY is_main DESC, created_at ASC`,
+      [userId]
+    );
+    return rows.map(r => ({
+      id: r.id,
+      userId: r.user_id,
+      name: r.name,
+      class: r.class || null,
+      realm: r.realm || null,
+      isMain: r.is_main,
+      createdAt: r.created_at,
     }));
-  }
+  },
 
-  static characterExists(userId, name) {
-    const result = statements.characterExists.get(userId, name);
-    return result.count > 0;
-  }
+  async characterExists(userId, name) {
+    const { rows } = await query(
+      `SELECT 1
+         FROM public.characters
+        WHERE user_id = $1 AND LOWER(name) = LOWER($2)
+        LIMIT 1`,
+      [userId, name]
+    );
+    return rows.length > 0;
+  },
 
-  static getCharacter(userId, name) {
-    const char = statements.getCharacter.get(userId, name);
-    if (!char) return null;
-    
-    return {
-      name: char.name,
-      class: char.class,
-      realm: char.realm,
-      isMain: char.is_main === 1,
-      createdAt: char.created_at
-    };
-  }
+  async getCharacter(userId, name) {
+    const { rows } = await query(
+      `SELECT id, user_id, name, class, realm, is_main, created_at
+         FROM public.characters
+        WHERE user_id = $1 AND LOWER(name) = LOWER($2)
+        LIMIT 1`,
+      [userId, name]
+    );
+    const r = rows[0];
+    return r
+      ? {
+          id: r.id,
+          userId: r.user_id,
+          name: r.name,
+          class: r.class || null,
+          realm: r.realm || null,
+          isMain: r.is_main,
+          createdAt: r.created_at,
+        }
+      : null;
+  },
 
-  static removeCharacter(userId, name) {
-    return statements.removeCharacter.run(userId, name);
-  }
+  async removeCharacter(userId, name) {
+    await query(
+      `DELETE FROM public.characters
+        WHERE user_id = $1 AND LOWER(name) = LOWER($2)`,
+      [userId, name]
+    );
+  },
 
-  // Gracefully close database connection
-  static close() {
-    db.close();
-  }
-}
-
+  async close() {
+    await pool.end();
+  },
+};

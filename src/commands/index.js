@@ -78,14 +78,17 @@ export function loadCommands(client) {
             return interaction.reply({ content: '⛔ Character names can only contain letters, spaces, apostrophes, and hyphens.', flags: MessageFlags.Ephemeral });
           }
 
-          if (CharacterDB.characterExists(userId, name)) {
+          // FIXED: Added await
+          if (await CharacterDB.characterExists(userId, name)) {
             return interaction.reply({ content: `⛔ You already have a character named **${name}** registered.`, flags: MessageFlags.Ephemeral });
           }
 
           const characterClass = selectedClass === 'none' ? null : selectedClass;
-          CharacterDB.addCharacter(userId, name, characterClass, realm, isMain);
+          // FIXED: Added await
+          await CharacterDB.addCharacter(userId, name, characterClass, realm, isMain);
 
-          const characters = CharacterDB.getCharacters(userId);
+          // FIXED: Added await
+          const characters = await CharacterDB.getCharacters(userId);
           if (characters.length === 1 || isMain) {
             try {
               await interaction.member.setNickname(name);
@@ -125,18 +128,22 @@ export function loadCommands(client) {
             }
 
             const characterName = decodeURIComponent(encodedName);
-            if (!CharacterDB.characterExists(userId, characterName)) {
+            // FIXED: Added await
+            if (!(await CharacterDB.characterExists(userId, characterName))) {
               return interaction.update({ content: `⛔ Character **${characterName}** no longer exists.`, components: [], flags: MessageFlags.Ephemeral });
             }
 
-            const character = CharacterDB.getCharacter(userId, characterName);
+            // FIXED: Added await
+            const character = await CharacterDB.getCharacter(userId, characterName);
             const wasMain = character.isMain;
 
-            CharacterDB.removeCharacter(userId, characterName);
+            // FIXED: Added await
+            await CharacterDB.removeCharacter(userId, characterName);
 
             let additionalMessage = '';
             if (wasMain) {
-              const remaining = CharacterDB.getCharacters(userId);
+              // FIXED: Added await
+              const remaining = await CharacterDB.getCharacters(userId);
               if (remaining.length > 0) {
                 additionalMessage = "\n\nSince this was your main character, you should set a new main using `/switch` and typing 'yes' when asked if it's your main.";
               }
@@ -153,7 +160,7 @@ export function loadCommands(client) {
         }
 
         if (interaction.customId.startsWith('cancel_delete:')) {
-          return interaction.update({ content: '❌ Character deletion cancelled.', components: [], flags: MessageFlags.Ephemeral });
+          return interaction.update({ content: '⏹ Character deletion cancelled.', components: [], flags: MessageFlags.Ephemeral });
         }
 
         return;
