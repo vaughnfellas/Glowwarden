@@ -13,7 +13,6 @@ import { CHANNELS } from './src/channels.js';
 import { startHealthServer } from './src/health-server.js';
 import { loadEvents } from './src/events/index.js';
 import { config } from './src/config.js';
-import { initVisitorDecreeService } from './src/services/visitor-decree-service.js';
 import { initInviteRoleService } from './src/services/invite-role-service.js';
 import { handleTrackedInviteJoin, cleanupExpiredInvites } from './src/services/invite-service.js';
 
@@ -43,7 +42,7 @@ loadEvents(client);
 // Init services when the bot is ready (guild caches available)
 client.once('ready', () => {
   initInviteRoleService(client);
-  initVisitorDecreeService(client);
+  
 
   // periodic cleanup of expired invites
   setInterval(() => {

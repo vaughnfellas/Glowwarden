@@ -7,7 +7,6 @@ import * as vcCommand from './vc.js';
 import * as decreeCommand from './decree.js';
 import * as idsCommand from './ids.js';
 import * as permsCommand from './perms.js';
-import * as visitorDecreeCommand from '../services/visitor-decree-service.js';
 import * as addaltCommand from './addalt.js';
 import * as glowwarden from './glowwarden.js';
 import * as statusCommand from './status.js';
@@ -24,7 +23,6 @@ export const commands = new Map([
   [decreeCommand.data.name, decreeCommand],
   [idsCommand.data.name, idsCommand],
   [permsCommand.data.name, permsCommand],
-  [visitorDecreeCommand.data.name, visitorDecreeCommand],
   [statusCommand.data.name, statusCommand],
   [pingCommand.data.name, pingCommand], // Add the ping command here
 
