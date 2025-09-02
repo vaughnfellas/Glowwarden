@@ -1,13 +1,14 @@
 // ============= index.js (main entry point) =============
 
-// Global error handlers
+// Global error handlers - log but don't exit
 process.on('unhandledRejection', (err) => {
   console.error('Unhandled promise rejection:', err);
-  process.exit(1);
+  // Don't exit on errors to keep the service running
 });
+
 process.on('uncaughtException', (err) => {
   console.error('Uncaught exception:', err);
-  process.exit(1);
+  // Don't exit on errors to keep the service running
 });
 
 import { Client, GatewayIntentBits } from 'discord.js';
@@ -38,6 +39,14 @@ const client = new Client({
     GatewayIntentBits.GuildMembers,
     GatewayIntentBits.GuildInvites,
   ],
+});
+
+// Add debug logging to see connection attempts
+client.on('debug', (info) => {
+  if (info.includes('Heartbeat') || info.includes('Session') || info.includes('Ready') || 
+      info.includes('Connect') || info.includes('Gateway')) {
+    console.log(`Discord debug: ${info}`);
+  }
 });
 
 // Expose command map for /glowwarden help
@@ -74,24 +83,39 @@ client.once('ready', () => {
   }, 30 * 60 * 1000); // 30 minutes
 });
 
+// Add a periodic check to see if the bot is actually connected
+setInterval(() => {
+  const status = client.ws.status; // 0 = READY, other values indicate issues
+  const readyAt = client.readyAt ? new Date(client.readyAt).toISOString() : 'Not ready';
+  console.log(`Bot status check - WS Status: ${status}, Ready since: ${readyAt}`);
+}, 60000); // Check every minute
+
 // Start health server (for Render keepalive)
 console.log('Starting health server...');
 startHealthServer();
+
+// Add login timeout detection
+const loginTimeout = setTimeout(() => {
+  console.error('⚠️ Discord login appears to be hanging (30 seconds with no response)');
+  console.error('This could indicate rate limiting or network issues');
+}, 30000);
 
 // Login with proper error handling
 console.log('Attempting Discord login...');
 client.login(token)
   .then(() => {
+    clearTimeout(loginTimeout); // Clear the timeout on success
     console.log('✅ Login request sent to Discord');
   })
   .catch(err => {
+    clearTimeout(loginTimeout); // Clear the timeout on error
     console.error('❌ Discord login failed:');
     console.error('Error name:', err.name);
     console.error('Error message:', err.message);
     console.error('Error code:', err.code);
     console.error('HTTP status:', err.httpStatus);
     console.error('Full error:', JSON.stringify(err, null, 2));
-    process.exit(1);
+    // Don't exit process to keep health server running
   });
 
 // Add connection debugging
