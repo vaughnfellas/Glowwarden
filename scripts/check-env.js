@@ -41,7 +41,6 @@ const OPTIONAL_NUMBERS = [
   'TEMP_VC_DELETE_AFTER',
   'TEMP_VC_USER_LIMIT',
   'SWEEP_INTERVAL_SEC',
-  'SPOREBOX_WELCOME_TTL_SEC',
   'PORT',
   'PUBLIC_ACK'
 ];
@@ -154,8 +153,6 @@ try {
     // Check for required channel exports
     const requiredChannels = [
       'CHAMBER_OF_OATHS',
-      'SPORE_BOX', 
-      'SPOREHALL',
       'HALL_OF_RECORDS',
       'RENT_A_WAR_CHAMBER',
       'BATTLEFRONT'
