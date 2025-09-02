@@ -14,7 +14,6 @@ import { startHealthServer } from './src/health-server.js';
 import { loadEvents } from './src/events/index.js';
 import { config } from './src/config.js';
 import { initInviteRoleService } from './src/services/invite-role-service.js';
-import { handleTrackedInviteJoin, cleanupExpiredInvites } from './src/services/invite-service.js';
 
 // ✅ correct path (was './commands/index.js')
 import { commands, loadCommands } from './src/commands/index.js';
