@@ -11,6 +11,7 @@ import * as visitorDecreeCommand from '../services/visitor-decree-service.js';
 import * as addaltCommand from './addalt.js';
 import * as glowwarden from './glowwarden.js';
 import * as statusCommand from './status.js';
+import * as pingCommand from './ping.js';
 
 import { CharacterDB } from '../database/characters.js';
 
@@ -25,8 +26,9 @@ export const commands = new Map([
   [permsCommand.data.name, permsCommand],
   [visitorDecreeCommand.data.name, visitorDecreeCommand],
   [statusCommand.data.name, statusCommand],
+  [pingCommand.data.name, pingCommand], // Add the ping command here
 
-  // pseudo-commands implemented inside addalt.js and status.js
+  // pseudo-commands implemented inside addalt.js
   [addaltCommand.data.name, addaltCommand],
   [addaltCommand.switchData.name, {
     execute: addaltCommand.executeSwitch,
@@ -39,9 +41,10 @@ export const commands = new Map([
     execute: addaltCommand.executeDeleteAlt,
     autocomplete: addaltCommand.autocompleteDeleteCharacters,
   }],
-  [statusCommand.pingData.name, {
-    execute: statusCommand.executePing,
-  }],
+  // Remove this line - it's causing the error:
+  // [statusCommand.pingData.name, {
+  //   execute: statusCommand.executePing,
+  // }],
 ]);
 
 export function loadCommands(client) {
