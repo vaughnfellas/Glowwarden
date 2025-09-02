@@ -14,8 +14,7 @@ export async function execute(client) {
   // Services
   initInviteRoleService(client);
   initTempVCService(client);
-  initSporeBoxService(client);
-
+  
   // Presence
   client.user.setPresence({
     activities: [{ name: 'the Chamber of Oaths', type: ActivityType.Watching }],
