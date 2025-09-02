@@ -18,15 +18,22 @@ export async function execute(oldState, newState) {
   // Handle leaving temp channels
   if (oldState.channelId && tempOwners.has(oldState.channelId)) {
     const ownerId = tempOwners.get(oldState.channelId);
+    
+    // If the owner left their own temp VC, remove Host role
     if (ownerId && oldState.member?.id === ownerId && config.TEMP_HOST_ROLE_ID) {
       try {
         await oldState.member.roles.remove(config.TEMP_HOST_ROLE_ID);
-      } catch {}
+        console.log(`🎭 Removed Host role from ${oldState.member.user.tag} (left own VC)`);
+      } catch (e) {
+        console.error('Failed to remove Host role:', e);
+      }
     }
+    
+    // Schedule deletion check regardless of who left
     scheduleDeleteIfEmpty(oldState.channelId, oldState.guild);
   }
 
-  // Handle joining temp channels
+  // Handle joining temp channels (cancel deletion timer if someone joins)
   if (newState.channelId && tempOwners.has(newState.channelId)) {
     scheduleDeleteIfEmpty(newState.channelId, newState.guild);
   }

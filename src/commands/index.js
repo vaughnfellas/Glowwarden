@@ -22,7 +22,7 @@ export const commands = new Map([
   [idsCommand.data.name, idsCommand],
   [permsCommand.data.name, permsCommand],
   [statusCommand.data.name, statusCommand],
-  [pingCommand.data.name, pingCommand], // Add the ping command here
+  [pingCommand.data.name, pingCommand],
 
   // pseudo-commands implemented inside addalt.js
   [addaltCommand.data.name, addaltCommand],
@@ -37,10 +37,6 @@ export const commands = new Map([
     execute: addaltCommand.executeDeleteAlt,
     autocomplete: addaltCommand.autocompleteDeleteCharacters,
   }],
-  // Remove this line - it's causing the error:
-  // [statusCommand.pingData.name, {
-  //   execute: statusCommand.executePing,
-  // }],
 ]);
 
 export function loadCommands(client) {
@@ -82,16 +78,15 @@ export function loadCommands(client) {
             return interaction.reply({ content: '⛔ Character names can only contain letters, spaces, apostrophes, and hyphens.', flags: MessageFlags.Ephemeral });
           }
 
-          // FIXED: Added await
+          // Check if character exists
           if (await CharacterDB.characterExists(userId, name)) {
             return interaction.reply({ content: `⛔ You already have a character named **${name}** registered.`, flags: MessageFlags.Ephemeral });
           }
 
           const characterClass = selectedClass === 'none' ? null : selectedClass;
-          // FIXED: Added await
           await CharacterDB.addCharacter(userId, name, characterClass, realm, isMain);
 
-          // FIXED: Added await
+          // Set nickname if first character or main
           const characters = await CharacterDB.getCharacters(userId);
           if (characters.length === 1 || isMain) {
             try {
@@ -132,21 +127,17 @@ export function loadCommands(client) {
             }
 
             const characterName = decodeURIComponent(encodedName);
-            // FIXED: Added await
             if (!(await CharacterDB.characterExists(userId, characterName))) {
               return interaction.update({ content: `⛔ Character **${characterName}** no longer exists.`, components: [], flags: MessageFlags.Ephemeral });
             }
 
-            // FIXED: Added await
             const character = await CharacterDB.getCharacter(userId, characterName);
             const wasMain = character.isMain;
 
-            // FIXED: Added await
             await CharacterDB.removeCharacter(userId, characterName);
 
             let additionalMessage = '';
             if (wasMain) {
-              // FIXED: Added await
               const remaining = await CharacterDB.getCharacters(userId);
               if (remaining.length > 0) {
                 additionalMessage = "\n\nSince this was your main character, you should set a new main using `/switch` and typing 'yes' when asked if it's your main.";
@@ -174,8 +165,9 @@ export function loadCommands(client) {
       if (interaction.isChatInputCommand()) {
         const cmd = commands.get(interaction.commandName);
         if (cmd) {
-          try { await cmd.execute(interaction); }
-          catch (err) {
+          try { 
+            await cmd.execute(interaction); 
+          } catch (err) {
             console.error(`Error executing /${interaction.commandName}:`, err);
             if (!interaction.replied && !interaction.deferred) {
               await interaction.reply({ content: '⚠️ Something went wrong.', flags: MessageFlags.Ephemeral }).catch(() => {});
@@ -185,8 +177,11 @@ export function loadCommands(client) {
       } else if (interaction.isAutocomplete()) {
         const cmd = commands.get(interaction.commandName);
         if (cmd?.autocomplete) {
-          try { await cmd.autocomplete(interaction); }
-          catch (err) { console.error(`Error in autocomplete for /${interaction.commandName}:`, err); }
+          try { 
+            await cmd.autocomplete(interaction); 
+          } catch (err) { 
+            console.error(`Error in autocomplete for /${interaction.commandName}:`, err); 
+          }
         }
       }
     } catch (error) {

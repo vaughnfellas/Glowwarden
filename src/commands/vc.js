@@ -1,86 +1,54 @@
 // ============= src/commands/vc.js =============
-import { SlashCommandBuilder, MessageFlags } from 'discord.js';
-import { tempOwners, createTempVCFor, getTempVCInviteInfo } from '../services/temp-vc-service.js';
+import { SlashCommandBuilder, MessageFlags, ChannelType } from 'discord.js';
+import { tempOwners } from '../services/temp-vc-service.js';
 import { CHANNELS } from '../channels.js';
+import { config } from '../config.js';
 
 export const data = new SlashCommandBuilder()
   .setName('vc')
-  .setDescription('Create/join War Chamber (auto-generates Stray Spore invites)')
+  .setDescription('Join a guild member\'s War Chamber by host name')
   .addStringOption(option =>
     option
       .setName('host')
-      .setDescription('Join existing War Chamber by host name (leave empty to create your own)')
+      .setDescription('Host name of the War Chamber you want to join')
+      .setRequired(true)
       .setAutocomplete(true)
   );
 
 export async function execute(interaction) {
-  const hostInput = interaction.options.getString('host');
+  const hostInput = interaction.options.getString('host', true);
   const member = interaction.member;
   const guild = interaction.guild;
 
-  // If no host specified, create their own War Chamber
-  if (!hostInput) {
-    // Check if they already have a War Chamber
-    const existingVC = [...tempOwners.entries()].find(([channelId, ownerId]) => ownerId === member.id);
-    
-    if (existingVC) {
-      const [channelId] = existingVC;
-      const channel = guild.channels.cache.get(channelId);
-      const inviteInfo = getTempVCInviteInfo(channelId);
-      
-      if (channel && inviteInfo) {
-        return interaction.reply({
-          content: [
-            `You already have an active War Chamber: **${channel.name}**`,
-            `Your auto-generated invite: \`${inviteInfo.url}\``,
-            `Share this link to bring friends directly to your chamber as Stray Spores!`
-          ].join('\n'),
-          flags: MessageFlags.Ephemeral
-        });
-      }
-    }
-
-    // Create new War Chamber
-    try {
-      await interaction.deferReply({ ephemeral: true });
-      
-      await createTempVCFor(member);
-      
-      return interaction.editReply({
-        content: [
-          '🏰 **War Chamber created!**',
-          'You\'ve been moved to your new chamber and an invite has been auto-generated.',
-          'Check the text channel in your War Chamber for the Stray Spore invite link!',
-          '',
-          '💡 **Tip:** Use `/vc-status` to see your invite link anytime.'
-        ].join('\n')
-      });
-      
-    } catch (error) {
-      console.error('Failed to create War Chamber:', error);
-      return interaction.editReply('❌ Failed to create War Chamber. Please try again.');
-    }
+  // Only allow guild members (not Stray Spores) to use this command
+  if (member.roles.cache.has(config.STRAY_SPORE_ROLE_ID) && 
+      !member.roles.cache.has(config.ROLE_BASE_MEMBER) &&
+      !member.roles.cache.has(config.ROLE_BASE_OFFICER) &&
+      !member.roles.cache.has(config.ROLE_BASE_VETERAN)) {
+    return interaction.reply({
+      content: 'This command is only available to guild members. Stray Spores should use the invite link provided by their host.',
+      flags: MessageFlags.Ephemeral
+    });
   }
 
-  // Join existing War Chamber
   try {
     const battlefront = guild.channels.cache.get(CHANNELS.BATTLEFRONT);
     if (!battlefront) {
       return interaction.reply({
-        content: '❌ Battlefront category not found.',
+        content: 'Battlefront category not found.',
         flags: MessageFlags.Ephemeral
       });
     }
 
     // Find matching host
     const tempVCs = battlefront.children.cache.filter(ch => 
-      ch.type === 2 && // GuildVoice
+      ch.type === ChannelType.GuildVoice && 
       tempOwners.has(ch.id)
     );
 
     let targetVC = null;
     
-    // Try exact match first
+    // Try to find matching host
     for (const [channelId, channel] of tempVCs) {
       const ownerId = tempOwners.get(channelId);
       try {
@@ -96,7 +64,7 @@ export async function execute(interaction) {
 
     if (!targetVC) {
       return interaction.reply({
-        content: `❌ No War Chamber found for host "${hostInput}". Use autocomplete to see available hosts.`,
+        content: `No War Chamber found for host "${hostInput}". Use autocomplete to see available hosts.`,
         flags: MessageFlags.Ephemeral
       });
     }
@@ -104,7 +72,7 @@ export async function execute(interaction) {
     // Check if user is already in voice
     if (!member.voice.channelId) {
       return interaction.reply({
-        content: '❌ You need to be in a voice channel first. Join Sporehall or any voice channel, then use this command.',
+        content: 'You need to be in a voice channel first. Join any voice channel, then use this command.',
         flags: MessageFlags.Ephemeral
       });
     }
@@ -114,13 +82,13 @@ export async function execute(interaction) {
       await member.voice.setChannel(targetVC.channel);
       
       return interaction.reply({
-        content: `✅ Moved you to **${targetVC.owner.displayName}**'s War Chamber!`,
+        content: `Moved you to **${targetVC.owner.displayName}**'s War Chamber!`,
         flags: MessageFlags.Ephemeral
       });
       
     } catch (error) {
       return interaction.reply({
-        content: '❌ Failed to move you to the War Chamber. You may not have permission to join.',
+        content: 'Failed to move you to the War Chamber. You may not have permission to join.',
         flags: MessageFlags.Ephemeral
       });
     }
@@ -128,7 +96,7 @@ export async function execute(interaction) {
   } catch (error) {
     console.error('VC command error:', error);
     return interaction.reply({
-      content: '❌ Something went wrong. Please try again.',
+      content: 'Something went wrong. Please try again.',
       flags: MessageFlags.Ephemeral
     });
   }
@@ -148,7 +116,7 @@ export async function autocomplete(interaction) {
     // Get all temp VCs and their owners
     const choices = [];
     const tempVCs = battlefront.children.cache.filter(ch => 
-      ch.type === 2 && // GuildVoice
+      ch.type === ChannelType.GuildVoice && 
       tempOwners.has(ch.id)
     );
 
@@ -174,8 +142,10 @@ export async function autocomplete(interaction) {
 
     // Sort by member count (more active chambers first)
     choices.sort((a, b) => {
-      const aCount = parseInt(a.name.match(/\((\d+) members\)/)[1]);
-      const bCount = parseInt(b.name.match(/\((\d+) members\)/)[1]);
+      const aMatch = a.name.match(/\((\d+) members\)/);
+      const bMatch = b.name.match(/\((\d+) members\)/);
+      const aCount = aMatch ? parseInt(aMatch[1]) : 0;
+      const bCount = bMatch ? parseInt(bMatch[1]) : 0;
       return bCount - aCount;
     });
 

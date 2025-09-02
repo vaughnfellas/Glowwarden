@@ -1,5 +1,5 @@
 // ============= src/services/temp-vc-service.js =============
-import { ChannelType, PermissionFlagsBits, EmbedBuilder } from 'discord.js';
+import { ChannelType, PermissionFlagsBits, EmbedBuilder, ModalBuilder, TextInputBuilder, TextInputStyle, ActionRowBuilder } from 'discord.js';
 import { CHANNELS } from '../channels.js';
 import { config } from '../config.js';
 
@@ -33,9 +33,24 @@ export function scheduleDeleteIfEmpty(channelId, guild) {
             const ownerMember = await guild.members.fetch(ownerId).catch(() => null);
             if (ownerMember?.roles.cache.has(config.TEMP_HOST_ROLE_ID)) {
               await ownerMember.roles.remove(config.TEMP_HOST_ROLE_ID);
+              console.log(`Host role removed from ${ownerMember.user.tag} (VC deleted)`);
             }
           } catch (e) {
             console.error('Remove Host role failed:', e);
+          }
+        }
+
+        // Clean up associated text channel
+        const inviteData = tempInvites.get(channelId);
+        if (inviteData?.textChannelId) {
+          try {
+            const textChannel = guild.channels.cache.get(inviteData.textChannelId);
+            if (textChannel) {
+              await textChannel.delete('War Chamber closed - cleaning up text channel');
+              console.log(`Deleted associated text channel: ${textChannel.name}`);
+            }
+          } catch (e) {
+            console.error('Failed to delete associated text channel:', e);
           }
         }
 
@@ -45,7 +60,7 @@ export function scheduleDeleteIfEmpty(channelId, guild) {
         await ch.delete('Temp VC empty past grace period');
         tempOwners.delete(channelId);
         deleteTimers.delete(channelId);
-        console.log('🧹 Deleted empty temp VC:', channelId);
+        console.log('Deleted empty temp VC:', channelId);
       }
     } catch (e) {
       console.error('Temp VC delete failed:', channelId, e);
@@ -79,6 +94,19 @@ export async function sweepTempRooms() {
             const owner = await guild.members.fetch(ownerId).catch(() => null);
             if (owner?.roles.cache.has(config.TEMP_HOST_ROLE_ID)) {
               await owner.roles.remove(config.TEMP_HOST_ROLE_ID);
+              console.log(`Host role removed from ${owner.user.tag} (sweep cleanup)`);
+            }
+          } catch {}
+        }
+
+        // Clean up associated text channel
+        const inviteData = tempInvites.get(ch.id);
+        if (inviteData?.textChannelId) {
+          try {
+            const textChannel = guild.channels.cache.get(inviteData.textChannelId);
+            if (textChannel) {
+              await textChannel.delete('Periodic sweep: War Chamber closed');
+              console.log(`Sweep deleted text channel: ${textChannel.name}`);
             }
           } catch {}
         }
@@ -92,7 +120,7 @@ export async function sweepTempRooms() {
 
       try {
         await ch.delete('Periodic sweep: empty temp VC in Battlefront');
-        console.log('🧹 Sweep deleted:', ch.id, ch.name);
+        console.log('Sweep deleted:', ch.id, ch.name);
       } catch (e) {
         console.error('Sweep delete failed:', ch.id, e);
       }
@@ -123,6 +151,7 @@ async function createAutoInvite(voiceChannel, member) {
       expiresAt: new Date(Date.now() + 86400000), // 24 hours from now
     });
 
+    console.log(`Auto-created War Chamber invite for ${member.user.tag}: ${invite.code}`);
     return invite;
   } catch (error) {
     console.error('Failed to create auto-invite for temp VC:', error);
@@ -130,86 +159,103 @@ async function createAutoInvite(voiceChannel, member) {
   }
 }
 
+async function sendInviteDM(member, invite, voiceChannel) {
+  try {
+    const dmEmbed = new EmbedBuilder()
+      .setTitle('Your War Chamber is Ready!')
+      .setDescription([
+        `**${member.displayName}**, your War Chamber has been created!`,
+        '',
+        '**Stray Spore Invite Link:**',
+        `\`\`\`${invite.url}\`\`\``,
+        '',
+        '**How to Use:**',
+        '• Share this link with friends outside the guild',
+        '• They\'ll get Stray Spore role automatically',
+        '• They\'ll be moved to your War Chamber',
+        '• Invite expires in 24 hours',
+        '',
+        '**Note:** Guild members can find your chamber using `/vc host:${member.displayName}`'
+      ].join('\n'))
+      .setColor(0x8B4513)
+      .setTimestamp();
+
+    await member.send({ embeds: [dmEmbed] });
+    console.log(`Sent War Chamber invite DM to ${member.user.tag}`);
+  } catch (error) {
+    console.error('Failed to send invite DM:', error);
+  }
+}
+
 async function postInviteMessage(voiceChannel, invite, member) {
   try {
-    // Find or create the text channel for this voice channel
-    // Discord automatically creates a text channel for voice channels in some configurations
-    // but we need to handle this more explicitly
-    
     const guild = voiceChannel.guild;
     const textChannelName = voiceChannel.name.toLowerCase().replace(/[^a-z0-9-]/g, '-') + '-text';
     
-    // Look for existing text channel
-    let textChannel = guild.channels.cache.find(ch => 
-      ch.name === textChannelName && 
-      ch.parentId === voiceChannel.parentId &&
-      ch.type === ChannelType.GuildText
-    );
-    
-    // Create text channel if it doesn't exist
-    if (!textChannel) {
-      textChannel = await guild.channels.create({
-        name: textChannelName,
-        type: ChannelType.GuildText,
-        parent: voiceChannel.parentId,
-        permissionOverwrites: [
-          {
-            id: guild.roles.everyone.id,
-            deny: [PermissionFlagsBits.ViewChannel],
-          },
-          {
-            id: member.id, // Chamber owner
-            allow: [
-              PermissionFlagsBits.ViewChannel,
-              PermissionFlagsBits.SendMessages,
-              PermissionFlagsBits.ReadMessageHistory,
-              PermissionFlagsBits.ManageMessages,
-            ],
-          },
-          {
-            id: config.STRAY_SPORE_ROLE_ID, // Stray spores can see
-            allow: [
-              PermissionFlagsBits.ViewChannel,
-              PermissionFlagsBits.SendMessages,
-              PermissionFlagsBits.ReadMessageHistory,
-            ],
-          },
-          {
-            id: guild.members.me.id, // Bot permissions
-            allow: [
-              PermissionFlagsBits.ViewChannel,
-              PermissionFlagsBits.SendMessages,
-              PermissionFlagsBits.ManageMessages,
-            ],
-          },
-        ],
-        reason: `Text channel for ${member.user.tag}'s War Chamber`,
-      });
-    }
+    // Create text channel
+    const textChannel = await guild.channels.create({
+      name: textChannelName,
+      type: ChannelType.GuildText,
+      parent: voiceChannel.parentId,
+      permissionOverwrites: [
+        {
+          id: guild.roles.everyone.id,
+          deny: [PermissionFlagsBits.ViewChannel],
+        },
+        {
+          id: member.id, // Chamber owner
+          allow: [
+            PermissionFlagsBits.ViewChannel,
+            PermissionFlagsBits.SendMessages,
+            PermissionFlagsBits.ReadMessageHistory,
+            PermissionFlagsBits.ManageMessages,
+          ],
+        },
+        {
+          id: config.STRAY_SPORE_ROLE_ID, // Stray spores can see
+          allow: [
+            PermissionFlagsBits.ViewChannel,
+            PermissionFlagsBits.SendMessages,
+            PermissionFlagsBits.ReadMessageHistory,
+          ],
+        },
+        {
+          id: guild.members.me.id, // Bot permissions
+          allow: [
+            PermissionFlagsBits.ViewChannel,
+            PermissionFlagsBits.SendMessages,
+            PermissionFlagsBits.ManageMessages,
+          ],
+        },
+      ],
+      reason: `Text channel for ${member.user.tag}'s War Chamber`,
+    });
 
-    // Post the invite in the text channel
+    // Post the invite with instructions
     const embed = new EmbedBuilder()
-      .setTitle('🏰 War Chamber Ready!')
+      .setTitle('War Chamber Invite Instructions')
       .setDescription([
-        `**${member.displayName}** has opened their War Chamber for guests!`,
+        `**${member.displayName}** has opened their War Chamber!`,
         '',
-        '**🔗 Stray Spore Invite:**',
+        '**For the Host:**',
+        '• Your invite link has been sent to your DMs',
+        '• Share that link with friends outside the guild',
+        '• They\'ll get Stray Spore role and join this chamber',
+        '',
+        '**For Guild Members:**',
+        `• Use \`/vc host:${member.displayName}\` to join this chamber`,
+        '• No invite link needed for guild members',
+        '',
+        '**Stray Spore Invite:**',
         `\`\`\`${invite.url}\`\`\``,
         '',
-        '**📋 Invite Details:**',
-        `• **Expires:** <t:${Math.floor(Date.now() / 1000) + 86400}:R>`,
-        '• **Uses:** Unlimited',
-        '• **Role:** Stray Spore (auto-assigned)',
-        '',
-        '_Share this link with friends to bring them directly to your War Chamber! They\'ll automatically receive the Stray Spore role and land in your voice channel._',
+        '_This invite expires in 24 hours and gives unlimited uses._',
       ].join('\n'))
       .setColor(0x8B4513)
-      .setTimestamp()
-      .setFooter({ text: 'Invite generated automatically' });
+      .setTimestamp();
 
     const message = await textChannel.send({ embeds: [embed] });
     
-    // Pin the message for easy access
     try {
       await message.pin();
     } catch (error) {
@@ -219,7 +265,6 @@ async function postInviteMessage(voiceChannel, invite, member) {
     // Store reference to text channel for cleanup
     tempInvites.get(voiceChannel.id).textChannelId = textChannel.id;
     
-    console.log(`🎫 Auto-created invite for ${member.user.tag}'s War Chamber: ${invite.code}`);
     return textChannel;
     
   } catch (error) {
@@ -231,7 +276,7 @@ async function postInviteMessage(voiceChannel, invite, member) {
 export async function createTempVCFor(member) {
   const guild = member.guild;
   
-  const name = (config.TEMP_VC_NAME_FMT || 'War Chamber — {user}')
+  const name = (config.TEMP_VC_NAME_FMT || 'War Chamber – {user}')
     .replace('{user}', member.displayName);
 
   const overwrites = [
@@ -251,7 +296,7 @@ export async function createTempVCFor(member) {
         PermissionFlagsBits.DeafenMembers,
         PermissionFlagsBits.MoveMembers,
         PermissionFlagsBits.ManageChannels,
-        PermissionFlagsBits.CreateInstantInvite, // Allow owner to create invites
+        PermissionFlagsBits.CreateInstantInvite,
       ],
     },
     {
@@ -291,28 +336,34 @@ export async function createTempVCFor(member) {
   if (config.TEMP_HOST_ROLE_ID) {
     try {
       await member.roles.add(config.TEMP_HOST_ROLE_ID);
+      console.log(`Granted Host role to ${member.user.tag}`);
     } catch (e) {
       console.error('Add Host role failed:', e);
     }
   }
 
-  // AUTO-CREATE INVITE AND POST IT
+  // AUTO-CREATE INVITE
   const invite = await createAutoInvite(ch, member);
   if (invite) {
+    // Send DM to host with their invite
+    await sendInviteDM(member, invite, ch);
+    // Post instructions in text channel
     await postInviteMessage(ch, invite, member);
   }
 
   // Move member to new chamber
   try {
     await member.voice.setChannel(ch);
-  } catch {}
+  } catch (e) {
+    console.log('Could not auto-move member to new chamber:', e.message);
+  }
 
   scheduleDeleteIfEmpty(ch.id, guild);
 
-  console.log('🏛️ Created temp VC for', member.user.tag, '->', ch.name, `(${ch.id})`);
+  console.log('Created temp VC for', member.user.tag, '->', ch.name, `(${ch.id})`);
 }
 
-// Handle member join via temp VC invite
+// Handle member join via temp VC invite - now includes character name modal for Stray Spores
 export async function handleTempVCInviteJoin(member, inviteCode) {
   // Find which temp VC this invite belongs to
   let targetChannelId = null;
@@ -334,15 +385,16 @@ export async function handleTempVCInviteJoin(member, inviteCode) {
       const role = member.guild.roles.cache.get(config.STRAY_SPORE_ROLE_ID);
       if (role && !member.roles.cache.has(role.id)) {
         await member.roles.add(role);
-        console.log(`🍄 Auto-assigned Stray Spore role to ${member.user.tag} via War Chamber invite`);
+        console.log(`Auto-assigned Stray Spore role to ${member.user.tag} via War Chamber invite`);
       }
     }
     
-    // Move them to the voice channel
+    // Move them to the voice channel if they're in voice
     const voiceChannel = member.guild.channels.cache.get(targetChannelId);
-    if (voiceChannel && voiceChannel.type === ChannelType.GuildVoice) {
+    if (voiceChannel && voiceChannel.type === ChannelType.GuildVoice && member.voice.channelId) {
       try {
         await member.voice.setChannel(voiceChannel);
+        console.log(`Moved ${member.user.tag} to War Chamber via invite`);
       } catch (error) {
         console.log(`Could not move ${member.user.tag} to voice channel:`, error.message);
       }
@@ -353,9 +405,16 @@ export async function handleTempVCInviteJoin(member, inviteCode) {
       const textChannel = member.guild.channels.cache.get(inviteData.textChannelId);
       if (textChannel) {
         textChannel.send(
-          `🍄 **${member.displayName}** has joined **${inviteData.ownerDisplayName}**'s War Chamber as a Stray Spore!`
+          `**${member.displayName}** has joined **${inviteData.ownerDisplayName}**'s War Chamber as a Stray Spore! Welcome!`
         ).catch(() => {});
       }
+    }
+
+    // Send character name modal to new Stray Spore
+    try {
+      await sendCharacterNameModal(member);
+    } catch (error) {
+      console.log('Could not send character modal to new Stray Spore:', error.message);
     }
     
     return true;
@@ -365,7 +424,30 @@ export async function handleTempVCInviteJoin(member, inviteCode) {
   }
 }
 
-// Get invite info for a temp VC (useful for debugging/status)
+async function sendCharacterNameModal(member) {
+  // We'll trigger this via DM with a button since we can't force a modal on guild join
+  // Let's send them a DM with instructions and a way to set their character name
+  try {
+    const dmEmbed = new EmbedBuilder()
+      .setTitle('Welcome, Stray Spore!')
+      .setDescription([
+        'Welcome to the guild! As a Stray Spore, you can set your WoW character name.',
+        '',
+        'To set your character name, use this command in any channel:',
+        '`/addalt`',
+        '',
+        'This will let you register your character and set your nickname.',
+      ].join('\n'))
+      .setColor(0x9ACD32);
+
+    await member.send({ embeds: [dmEmbed] });
+    console.log(`Sent character setup instructions to ${member.user.tag}`);
+  } catch (error) {
+    console.error('Failed to send character setup DM:', error);
+  }
+}
+
+// Get invite info for a temp VC
 export function getTempVCInviteInfo(channelId) {
   return tempInvites.get(channelId) || null;
 }

@@ -3,7 +3,6 @@ import { Events, ActivityType } from 'discord.js';
 import { config } from '../config.js';
 import { sweepTempRooms, initTempVCService } from '../services/temp-vc-service.js';
 import { initInviteRoleService } from '../services/invite-role-service.js';
-import { initSporeBoxService } from '../services/sporebox-service.js';
 
 export const name = Events.ClientReady;
 export const once = true;

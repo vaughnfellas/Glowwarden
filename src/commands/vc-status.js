@@ -1,5 +1,5 @@
 // ============= src/commands/vc-status.js =============
-import { SlashCommandBuilder, EmbedBuilder, MessageFlags } from 'discord.js';
+import { SlashCommandBuilder, EmbedBuilder, ChannelType } from 'discord.js';
 import { tempOwners, tempInvites, getTempVCInviteInfo } from '../services/temp-vc-service.js';
 import { config } from '../config.js';
 import { CHANNELS } from '../channels.js';
@@ -22,12 +22,12 @@ export async function execute(interaction) {
     // Get all temp VCs in the battlefront
     const tempVCs = guild.channels.cache.filter(ch => 
       ch.parentId === CHANNELS.BATTLEFRONT && 
-      ch.type === 0 && // GuildVoice
+      ch.type === ChannelType.GuildVoice && 
       tempOwners.has(ch.id)
     );
 
     if (tempVCs.size === 0) {
-      return interaction.editReply('📭 No active War Chambers found.');
+      return interaction.editReply('🔭 No active War Chambers found.');
     }
 
     const embed = new EmbedBuilder()
@@ -63,6 +63,7 @@ export async function execute(interaction) {
         description.push(vcInfo.join('\n'));
       } catch (error) {
         description.push(`**${channel.name}** - Error loading info`);
+        console.error('Error loading VC info:', error);
       }
     }
 

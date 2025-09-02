@@ -9,7 +9,6 @@ import { data as generateInviteData } from './commands/generate-invite.js';
 import { data as glowwardenData } from './commands/glowwarden.js';
 import { data as statusData } from './commands/status.js';
 import { data as pingData } from './commands/ping.js';
-import { data as vcStatusData } from './commands/vc-status.js';
 
 // Helper: basic snowflake validator (17–20 digit ID)
 const SNOWFLAKE = v => /^\d{17,20}$/.test(String(v || '').trim());
@@ -41,7 +40,6 @@ const vcCmd = new SlashCommandBuilder()
 // Include ALL commands in the deployment
 const commands = [
   vcCmd, 
-  vcStatusData,
   decreeData, 
   idsData, 
   permsData, 
