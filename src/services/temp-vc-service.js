@@ -23,6 +23,8 @@ let client;
 
 export function initTempVCService(discordClient) {
   client = discordClient;
+  // Expose tempInvites on the client for invite tracking
+  client.tempInvites = tempInvites;
 }
 
 export function scheduleDeleteIfEmpty(channelId, guild) {
@@ -582,4 +584,66 @@ export async function handleCharacterNameSubmit(interaction) {
     }
     
     // Set the nickname
-    await interaction.member.set
+    await interaction.member.setNickname(characterName, 'Stray Spore character name setup');
+    
+    // Remove from pending setups
+    pendingNameSetups.delete(interaction.user.id);
+    
+    return interaction.reply({
+      content: `✅ Your nickname has been set to **${characterName}**!`,
+      ephemeral: true
+    });
+  } catch (error) {
+    console.error('Failed to set character name:', error);
+    return interaction.reply({
+      content: 'Failed to set your nickname. Please try again later or contact a guild officer.',
+      ephemeral: true
+    });
+  }
+}
+
+// Get invite info for a temp VC
+export function getTempVCInviteInfo(channelId) {
+  return tempInvites.get(channelId) || null;
+}
+
+// Grant access to existing guild member
+export async function grantAccessToMember(member, channelId) {
+  try {
+    // Assign Stray Spore role if they don't have it
+    if (config.STRAY_SPORE_ROLE_ID && !member.roles.cache.has(config.STRAY_SPORE_ROLE_ID)) {
+      await member.roles.add(config.STRAY_SPORE_ROLE_ID);
+      console.log(`Granted Stray Spore role to ${member.user.tag} via access button`);
+    }
+    
+    // Get the channel
+    const channel = member.guild.channels.cache.get(channelId);
+    if (!channel) {
+      return { success: false, message: 'War Chamber not found.' };
+    }
+    
+    // If they're in voice, move them
+    if (member.voice.channelId) {
+      try {
+        await member.voice.setChannel(channel);
+        return { 
+          success: true, 
+          message: `You now have access to the War Chamber! You've been moved to ${channel.name}.` 
+        };
+      } catch (error) {
+        return { 
+          success: true, 
+          message: `You now have access to the War Chamber! Join voice and use /vc to move there.` 
+        };
+      }
+    } else {
+      return { 
+        success: true, 
+        message: `You now have access to the War Chamber! Join voice and use /vc to move there.` 
+      };
+    }
+  } catch (error) {
+    console.error('Failed to grant access:', error);
+    return { success: false, message: 'Failed to grant access. Please try again later.' };
+  }
+}
