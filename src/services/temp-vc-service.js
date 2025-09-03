@@ -1,5 +1,15 @@
-// ============= src/services/temp-vc-service.js =============
-import { ChannelType, PermissionFlagsBits, EmbedBuilder, ModalBuilder, TextInputBuilder, TextInputStyle, ActionRowBuilder } from 'discord.js';
+// src/services/temp-vc-service.js
+import { 
+  ChannelType, 
+  PermissionFlagsBits, 
+  EmbedBuilder, 
+  ModalBuilder, 
+  TextInputBuilder, 
+  TextInputStyle, 
+  ActionRowBuilder,
+  ButtonBuilder,
+  ButtonStyle
+} from 'discord.js';
 import { CHANNELS } from '../channels.js';
 import { config } from '../config.js';
 
@@ -7,6 +17,7 @@ import { config } from '../config.js';
 export const tempOwners = new Map();
 export const deleteTimers = new Map();
 export const tempInvites = new Map(); // channelId -> invite data
+export const pendingNameSetups = new Set(); // userId -> true (users who need to set name)
 
 let client;
 
@@ -125,8 +136,63 @@ export async function sweepTempRooms() {
         console.error('Sweep delete failed:', ch.id, e);
       }
     }
+    
+    // Optional: Clean up orphaned Stray Spore roles
+    await sweepOrphanedStraySpores(guild);
+    
   } catch (e) {
     console.error('Sweep error:', e);
+  }
+}
+
+// Optional: Remove Stray Spore role from users who aren't in any temp VC
+async function sweepOrphanedStraySpores(guild) {
+  try {
+    // Get all active temp VCs
+    const activeVCs = new Set();
+    for (const [channelId] of tempOwners.entries()) {
+      activeVCs.add(channelId);
+    }
+    
+    // Get all members with Stray Spore role
+    const straySporeRole = guild.roles.cache.get(config.STRAY_SPORE_ROLE_ID);
+    if (!straySporeRole) return;
+    
+    // Fetch all members with the role
+    const members = await guild.members.fetch();
+    const straySpores = members.filter(m => 
+      m.roles.cache.has(config.STRAY_SPORE_ROLE_ID) && 
+      !m.user.bot
+    );
+    
+    // Check each Stray Spore
+    for (const [memberId, member] of straySpores) {
+      // Skip if they're in a temp VC
+      if (member.voice.channelId && activeVCs.has(member.voice.channelId)) {
+        continue;
+      }
+      
+      // Skip if they're a guild member (has any base role)
+      if (member.roles.cache.has(config.ROLE_BASE_MEMBER) ||
+          member.roles.cache.has(config.ROLE_BASE_OFFICER) ||
+          member.roles.cache.has(config.ROLE_BASE_VETERAN)) {
+        continue;
+      }
+      
+      // If they're not in any temp VC and not a guild member, remove the role
+      // Only do this for members who haven't been active in the last 24 hours
+      const twentyFourHoursAgo = Date.now() - (24 * 60 * 60 * 1000);
+      if (member.joinedTimestamp < twentyFourHoursAgo) {
+        try {
+          await member.roles.remove(config.STRAY_SPORE_ROLE_ID);
+          console.log(`Removed orphaned Stray Spore role from ${member.user.tag}`);
+        } catch (error) {
+          console.error(`Failed to remove Stray Spore role from ${member.user.tag}:`, error);
+        }
+      }
+    }
+  } catch (error) {
+    console.error('Failed to sweep orphaned Stray Spores:', error);
   }
 }
 
@@ -175,7 +241,7 @@ async function sendInviteDM(member, invite, voiceChannel) {
         '• They\'ll be moved to your War Chamber',
         '• Invite expires in 24 hours',
         '',
-        '**Note:** Guild members can find your chamber using `/vc host:${member.displayName}`'
+        '**Note:** Guild members can find your chamber using `/vc goto host:${member.displayName}`'
       ].join('\n'))
       .setColor(0x8B4513)
       .setTimestamp();
@@ -231,6 +297,19 @@ async function postInviteMessage(voiceChannel, invite, member) {
       reason: `Text channel for ${member.user.tag}'s War Chamber`,
     });
 
+    // Create access button for existing members
+    const accessButton = new ButtonBuilder()
+      .setCustomId(`access_${voiceChannel.id}`)
+      .setLabel('Get Access (Guild Members)')
+      .setStyle(ButtonStyle.Primary);
+
+    const nameButton = new ButtonBuilder()
+      .setCustomId(`setname`)
+      .setLabel('Set WoW Character Name')
+      .setStyle(ButtonStyle.Success);
+
+    const buttonRow = new ActionRowBuilder().addComponents(accessButton, nameButton);
+
     // Post the invite with instructions
     const embed = new EmbedBuilder()
       .setTitle('War Chamber Invite Instructions')
@@ -243,18 +322,23 @@ async function postInviteMessage(voiceChannel, invite, member) {
         '• They\'ll get Stray Spore role and join this chamber',
         '',
         '**For Guild Members:**',
-        `• Use \`/vc host:${member.displayName}\` to join this chamber`,
-        '• No invite link needed for guild members',
+        `• Use \`/vc goto host:${member.displayName}\` to join this chamber`,
+        '• Or click the "Get Access" button below',
         '',
         '**Stray Spore Invite:**',
         `\`\`\`${invite.url}\`\`\``,
         '',
         '_This invite expires in 24 hours and gives unlimited uses._',
+        '',
+        '**New Stray Spores:** Click "Set WoW Character Name" to set your nickname'
       ].join('\n'))
       .setColor(0x8B4513)
       .setTimestamp();
 
-    const message = await textChannel.send({ embeds: [embed] });
+    const message = await textChannel.send({ 
+      embeds: [embed],
+      components: [buttonRow]
+    });
     
     try {
       await message.pin();
@@ -282,7 +366,11 @@ export async function createTempVCFor(member) {
   const overwrites = [
     {
       id: guild.roles.everyone.id,
-      deny: [PermissionFlagsBits.Connect, PermissionFlagsBits.CreateInstantInvite],
+      deny: [
+        PermissionFlagsBits.ViewChannel,
+        PermissionFlagsBits.Connect, 
+        PermissionFlagsBits.CreateInstantInvite
+      ],
     },
     {
       id: member.id,
@@ -297,6 +385,7 @@ export async function createTempVCFor(member) {
         PermissionFlagsBits.MoveMembers,
         PermissionFlagsBits.ManageChannels,
         PermissionFlagsBits.CreateInstantInvite,
+        PermissionFlagsBits.PrioritySpeaker,
       ],
     },
     {
@@ -361,9 +450,11 @@ export async function createTempVCFor(member) {
   scheduleDeleteIfEmpty(ch.id, guild);
 
   console.log('Created temp VC for', member.user.tag, '->', ch.name, `(${ch.id})`);
+  
+  return ch;
 }
 
-// Handle member join via temp VC invite - now includes character name modal for Stray Spores
+// Handle member join via temp VC invite
 export async function handleTempVCInviteJoin(member, inviteCode) {
   // Find which temp VC this invite belongs to
   let targetChannelId = null;
@@ -386,6 +477,9 @@ export async function handleTempVCInviteJoin(member, inviteCode) {
       if (role && !member.roles.cache.has(role.id)) {
         await member.roles.add(role);
         console.log(`Auto-assigned Stray Spore role to ${member.user.tag} via War Chamber invite`);
+        
+        // Mark this user as needing to set their name
+        pendingNameSetups.add(member.id);
       }
     }
     
@@ -412,9 +506,9 @@ export async function handleTempVCInviteJoin(member, inviteCode) {
 
     // Send character name modal to new Stray Spore
     try {
-      await sendCharacterNameModal(member);
+      await sendCharacterNameDM(member);
     } catch (error) {
-      console.log('Could not send character modal to new Stray Spore:', error.message);
+      console.log('Could not send character name DM to new Stray Spore:', error.message);
     }
     
     return true;
@@ -424,30 +518,68 @@ export async function handleTempVCInviteJoin(member, inviteCode) {
   }
 }
 
-async function sendCharacterNameModal(member) {
-  // We'll trigger this via DM with a button since we can't force a modal on guild join
-  // Let's send them a DM with instructions and a way to set their character name
+// Send DM with character name setup instructions
+async function sendCharacterNameDM(member) {
   try {
+    const nameButton = new ButtonBuilder()
+      .setCustomId(`setname`)
+      .setLabel('Set WoW Character Name')
+      .setStyle(ButtonStyle.Success);
+
+    const buttonRow = new ActionRowBuilder().addComponents(nameButton);
+
     const dmEmbed = new EmbedBuilder()
       .setTitle('Welcome, Stray Spore!')
       .setDescription([
-        'Welcome to the guild! As a Stray Spore, you can set your WoW character name.',
+        'Welcome to the guild! As a Stray Spore, please set your WoW character name.',
         '',
-        'To set your character name, use this command in any channel:',
-        '`/addalt`',
-        '',
-        'This will let you register your character and set your nickname.',
+        'Click the button below to set your character name:',
       ].join('\n'))
       .setColor(0x9ACD32);
 
-    await member.send({ embeds: [dmEmbed] });
-    console.log(`Sent character setup instructions to ${member.user.tag}`);
+    await member.send({ 
+      embeds: [dmEmbed],
+      components: [buttonRow]
+    });
+    console.log(`Sent character setup DM to ${member.user.tag}`);
   } catch (error) {
     console.error('Failed to send character setup DM:', error);
   }
 }
 
-// Get invite info for a temp VC
-export function getTempVCInviteInfo(channelId) {
-  return tempInvites.get(channelId) || null;
+// Create the character name modal
+export function createCharacterNameModal() {
+  const modal = new ModalBuilder()
+    .setCustomId('character_name_modal')
+    .setTitle('Set WoW Character Name');
+
+  const nameInput = new TextInputBuilder()
+    .setCustomId('character_name')
+    .setLabel('Enter your WoW character name')
+    .setPlaceholder('e.g. Thrall')
+    .setMinLength(2)
+    .setMaxLength(24)
+    .setRequired(true)
+    .setStyle(TextInputStyle.Short);
+
+  const actionRow = new ActionRowBuilder().addComponents(nameInput);
+  modal.addComponents(actionRow);
+
+  return modal;
 }
+
+// Handle character name submission
+export async function handleCharacterNameSubmit(interaction) {
+  try {
+    const characterName = interaction.fields.getTextInputValue('character_name');
+    
+    // Validate character name
+    if (!/^[A-Za-z\s'-]{2,24}$/.test(characterName)) {
+      return interaction.reply({
+        content: 'Invalid character name. Please use only letters, spaces, apostrophes, and hyphens.',
+        ephemeral: true
+      });
+    }
+    
+    // Set the nickname
+    await interaction.member.set

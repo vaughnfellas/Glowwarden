@@ -13,7 +13,6 @@ process.on('uncaughtException', (err) => {
 
 import { Client, GatewayIntentBits } from 'discord.js';
 import { CHANNELS } from './src/channels.js';
-import { startHealthServer, notifyDiscordConnected } from './src/health-server.js';
 import { loadEvents } from './src/events/index.js';
 import { config } from './src/config.js';
 import { tempInvites } from './src/services/temp-vc-service.js';
@@ -46,17 +45,24 @@ const client = new Client({
   ],
 });
 
-// Add debug logging for critical connection events only
-client.on('debug', (info) => {
-  if (info.includes('Heartbeat acknowledged') || 
-      info.includes('Session') || 
-      info.includes('[CONNECT]') || 
-      info.includes('[READY]') ||
-      info.includes('Identify') ||
-      info.includes('Gateway')) {
-    console.log(`Discord debug: ${info}`);
-  }
+client.once('ready', () => {
+  console.log(`✅ Ready as ${client.user.tag}`);
 });
+
+client.on('shardReady', (id) => {
+  console.log(`🟢 Shard ${id} ready`);
+});
+
+client.on('shardResume', (id, replayed) => {
+  console.log(`🔄 Shard ${id} resumed (replayed=${replayed})`);
+});
+
+client.on('shardDisconnect', (event, id) => {
+  console.warn(`🟥 Shard ${id} disconnected: ${event.code} ${event.reason || ''}`);
+});
+
+client.on('warn', (m) => console.warn('⚠️ DJS warn:', m));
+client.on('error', (e) => console.error('💥 DJS error:', e));
 
 // Expose command map for /glowwarden help
 client.commands = commands;
@@ -117,9 +123,6 @@ loadEvents(client);
 client.once('ready', () => {
   console.log(`🎯 Bot ready! Logged in as ${client.user.tag}`);
   
-  // Notify health server that Discord is connected
-  notifyDiscordConnected();
-  
   // Reset reconnection attempts on successful connection
   reconnectAttempts = 0;
   if (reconnectTimeout) {
@@ -130,12 +133,8 @@ client.once('ready', () => {
   // Start periodic cleanup with a longer interval
   setInterval(() => {
     cleanupExpiredInvites();
-  }, 60 * 60 * 1000); // 60 minutes instead of 30
+  }, 60 * 60 * 1000); // 60 minutes
 });
-
-// Start health server (for Render keepalive)
-console.log('Starting health server...');
-startHealthServer();
 
 // Add login timeout detection
 const loginTimeout = setTimeout(() => {

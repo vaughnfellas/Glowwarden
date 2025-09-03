@@ -3,6 +3,7 @@ import { Events, MessageFlags } from 'discord.js';
 
 import * as generateInviteCommand from './generate-invite.js';
 import * as vcCommand from './vc.js';
+import * as vcStatusCommand from './vc-status.js';
 import * as decreeCommand from './decree.js';
 import * as idsCommand from './ids.js';
 import * as permsCommand from './perms.js';
@@ -18,6 +19,7 @@ export const commands = new Map([
   [glowwarden.data.name, glowwarden],
   [generateInviteCommand.data.name, generateInviteCommand],
   [vcCommand.data.name, vcCommand],
+  [vcStatusCommand.data.name, vcStatusCommand],
   [decreeCommand.data.name, decreeCommand],
   [idsCommand.data.name, idsCommand],
   [permsCommand.data.name, permsCommand],
@@ -158,6 +160,30 @@ export function loadCommands(client) {
           return interaction.update({ content: '↩ Character deletion cancelled.', components: [], flags: MessageFlags.Ephemeral });
         }
 
+        // Handle War Chamber buttons
+        if (interaction.customId === 'setname') {
+          const { createCharacterNameModal } = await import('../services/temp-vc-service.js');
+          const modal = createCharacterNameModal();
+          await interaction.showModal(modal);
+          return;
+        }
+        else if (interaction.customId.startsWith('access_')) {
+          const { grantAccessToMember } = await import('../services/temp-vc-service.js');
+          const channelId = interaction.customId.split('_')[1];
+          const result = await grantAccessToMember(interaction.member, channelId);
+          
+          await interaction.reply({
+            content: result.message,
+            ephemeral: true
+          });
+          return;
+        }
+      }
+
+      // ===== character name modal =====
+      if (interaction.isModalSubmit() && interaction.customId === 'character_name_modal') {
+        const { handleCharacterNameSubmit } = await import('../services/temp-vc-service.js');
+        await handleCharacterNameSubmit(interaction);
         return;
       }
 

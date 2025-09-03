@@ -2,7 +2,7 @@
 import { Events, PermissionFlagsBits, EmbedBuilder } from 'discord.js';
 import { config } from '../config.js';
 import { CHANNELS } from '../channels.js';
-import { handleTempVCInviteJoin } from './temp-vc-service.js';
+import { handleTempVCInviteJoin, tempInvites } from './temp-vc-service.js';
 
 const cache = new Map(); // guildId -> Map<code, uses>
 
@@ -70,10 +70,27 @@ async function startOathCeremony(member, roleId) {
   }
 }
 
+// Check if an invite code belongs to a War Chamber
+function isWarChamberInvite(code) {
+  // Check all temp invites to see if this code matches any of them
+  for (const [_, inviteData] of tempInvites.entries()) {
+    if (inviteData.code === code) {
+      return true;
+    }
+  }
+  return false;
+}
+
 async function assignRoleForCode(member, code) {
-  // First, try the temp VC invite system (Stray Spores)
-  if (code && await handleTempVCInviteJoin(member, code)) {
-    return { assigned: true, type: 'temp_vc', roleId: config.STRAY_SPORE_ROLE_ID };
+  // First, check if this is a War Chamber invite
+  if (code && isWarChamberInvite(code)) {
+    // Process as War Chamber invite
+    const success = await handleTempVCInviteJoin(member, code);
+    return { 
+      assigned: success, 
+      type: 'temp_vc', 
+      roleId: config.STRAY_SPORE_ROLE_ID 
+    };
   }
   
   // Handle regular member/officer/vet invites
