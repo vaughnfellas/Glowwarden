@@ -32,6 +32,8 @@ __tests__/
 test-*.js
 test-*.cjs
 test-token.js
+test-db.cjs
+
 
 # --- Local databases (exclude if not needed in prod) ---
 # If your bot DOESN'T need these on the server, keep excluded:
