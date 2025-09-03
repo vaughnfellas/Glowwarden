@@ -13,7 +13,7 @@ process.on('uncaughtException', (err) => {
 
 import { Client, GatewayIntentBits } from 'discord.js';
 import { CHANNELS } from './src/channels.js';
-import { startHealthServer } from './src/health-server.js';
+import { startHealthServer, notifyDiscordConnected } from './src/health-server.js';
 import { loadEvents } from './src/events/index.js';
 import { config } from './src/config.js';
 import { tempInvites } from './src/services/temp-vc-service.js';
@@ -31,6 +31,11 @@ if (!token) {
   process.exit(1);
 }
 
+// Track reconnection attempts
+let reconnectAttempts = 0;
+const maxReconnectAttempts = 5;
+let reconnectTimeout = null;
+
 // Create Discord client
 const client = new Client({
   intents: [
@@ -41,10 +46,14 @@ const client = new Client({
   ],
 });
 
-// Add debug logging to see connection attempts
+// Add debug logging for critical connection events only
 client.on('debug', (info) => {
-  if (info.includes('Heartbeat') || info.includes('Session') || info.includes('Ready') || 
-      info.includes('Connect') || info.includes('Gateway')) {
+  if (info.includes('Heartbeat acknowledged') || 
+      info.includes('Session') || 
+      info.includes('[CONNECT]') || 
+      info.includes('[READY]') ||
+      info.includes('Identify') ||
+      info.includes('Gateway')) {
     console.log(`Discord debug: ${info}`);
   }
 });
@@ -67,6 +76,37 @@ function cleanupExpiredInvites() {
   }
 }
 
+// Reconnection function with exponential backoff
+function attemptReconnect() {
+  if (reconnectAttempts >= maxReconnectAttempts) {
+    console.error(`❌ Maximum reconnection attempts (${maxReconnectAttempts}) reached. Giving up.`);
+    return;
+  }
+  
+  reconnectAttempts++;
+  const delay = Math.min(1000 * Math.pow(2, reconnectAttempts + 2), 30 * 60 * 1000); // Between 8s and 30min
+  
+  console.log(`Attempting to reconnect to Discord (attempt ${reconnectAttempts}/${maxReconnectAttempts}) in ${delay/1000} seconds...`);
+  
+  // Clear any existing timeout
+  if (reconnectTimeout) {
+    clearTimeout(reconnectTimeout);
+  }
+  
+  reconnectTimeout = setTimeout(() => {
+    console.log('Reconnecting to Discord...');
+    client.login(token)
+      .then(() => {
+        console.log('✅ Reconnection successful');
+        reconnectAttempts = 0;
+      })
+      .catch(err => {
+        console.error('❌ Reconnection failed:', err.message);
+        attemptReconnect(); // Try again with increased backoff
+      });
+  }, delay);
+}
+
 // Wire command & event routers
 console.log('Loading commands...');
 loadCommands(client);
@@ -77,18 +117,21 @@ loadEvents(client);
 client.once('ready', () => {
   console.log(`🎯 Bot ready! Logged in as ${client.user.tag}`);
   
-  // Start periodic cleanup
+  // Notify health server that Discord is connected
+  notifyDiscordConnected();
+  
+  // Reset reconnection attempts on successful connection
+  reconnectAttempts = 0;
+  if (reconnectTimeout) {
+    clearTimeout(reconnectTimeout);
+    reconnectTimeout = null;
+  }
+  
+  // Start periodic cleanup with a longer interval
   setInterval(() => {
     cleanupExpiredInvites();
-  }, 30 * 60 * 1000); // 30 minutes
+  }, 60 * 60 * 1000); // 60 minutes instead of 30
 });
-
-// Add a periodic check to see if the bot is actually connected
-setInterval(() => {
-  const status = client.ws.status; // 0 = READY, other values indicate issues
-  const readyAt = client.readyAt ? new Date(client.readyAt).toISOString() : 'Not ready';
-  console.log(`Bot status check - WS Status: ${status}, Ready since: ${readyAt}`);
-}, 60000); // Check every minute
 
 // Start health server (for Render keepalive)
 console.log('Starting health server...');
@@ -98,6 +141,7 @@ startHealthServer();
 const loginTimeout = setTimeout(() => {
   console.error('⚠️ Discord login appears to be hanging (30 seconds with no response)');
   console.error('This could indicate rate limiting or network issues');
+  // Don't attempt immediate reconnection - wait for disconnect event
 }, 30000);
 
 // Login with proper error handling
@@ -115,16 +159,24 @@ client.login(token)
     console.error('Error code:', err.code);
     console.error('HTTP status:', err.httpStatus);
     console.error('Full error:', JSON.stringify(err, null, 2));
-    // Don't exit process to keep health server running
+    
+    // Attempt reconnection after initial failure
+    attemptReconnect();
   });
 
-// Add connection debugging
+// Add connection debugging with reconnection logic
 client.on('error', (error) => {
   console.error('Discord client error:', error);
 });
 
 client.on('disconnect', (event) => {
   console.error('Discord client disconnected:', event);
+  
+  // If we're disconnected (status 3), attempt reconnection with backoff
+  if (client.ws.status === 3) {
+    console.log('Discord connection in DISCONNECTED state, scheduling reconnection');
+    attemptReconnect();
+  }
 });
 
 client.on('reconnecting', () => {
@@ -133,4 +185,6 @@ client.on('reconnecting', () => {
 
 client.on('resume', () => {
   console.log('Discord client resumed');
+  // Reset reconnection attempts on successful resume
+  reconnectAttempts = 0;
 });
