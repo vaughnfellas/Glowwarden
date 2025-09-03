@@ -1,0 +1,43 @@
+name: Local Agent
+version: 1.0.0
+schema: v1
+
+# ----- Models (Ollama local) -----
+models:
+  - name: Coder (Qwen 7B local)
+    provider: ollama
+    model: qwen2.5-coder:7b
+    apiBase: http://localhost:11434
+    role: code
+
+  - name: Planner (Llama3 8B local)
+    provider: ollama
+    model: llama3:8b
+    apiBase: http://localhost:11434
+    role: chat
+
+  - name: Coder (CodeLlama local)
+    provider: ollama
+    model: codellama:latest
+    apiBase: http://localhost:11434
+    role: code
+    hidden: true
+
+# Optional defaults (you can still change from the model dropdown)
+defaultModel: Coder (Qwen 7B local)
+defaultChatModel: Planner (Llama3 8B local)
+
+# ----- Context providers (this is what lets Continue "see" your repo) -----
+context:
+  - provider: codebase
+    params:
+      maxFiles: 5000
+      exclude:
+        - node_modules/**
+        - .git/**
+        - .continue/**
+  - provider: folder
+  - provider: code
+  - provider: diff
+  - provider: problems
+  - provider: terminal

@@ -1,38 +1,61 @@
 // src/db.js
+// Centralized Supabase client for the entire application
 import 'dotenv/config';
-import pg from 'pg';
+import { createClient } from '@supabase/supabase-js';
+import { config } from './config.js';
 
-const { Pool } = pg;
-const isProduction = process.env.NODE_ENV === 'production';
+const supabaseUrl = process.env.SUPABASE_URL || config.SUPABASE_URL;
+const supabaseKey = process.env.SUPABASE_SERVICE_KEY || config.SUPABASE_SERVICE_KEY;
 
-export const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-  ssl: isProduction ? { rejectUnauthorized: false } : false,
-  // Pool tuning (optional, keep if useful)
-  max: 20,
-  idleTimeoutMillis: 30_000,
-  connectionTimeoutMillis: 2_000,
-});
+// Validate required Supabase credentials
+if (!supabaseUrl || !supabaseKey) {
+  console.error('❌ Missing required Supabase credentials:');
+  console.error('- SUPABASE_URL:', !!supabaseUrl);
+  console.error('- SUPABASE_SERVICE_KEY:', !!supabaseKey);
+  process.exit(1);
+}
 
-// Optional: quick connectivity check (logs at boot)
-pool.connect()
-  .then(client => client.query('SELECT NOW()').finally(() => client.release()))
-  .then(res => console.log('✅ DB up. Time:', res.rows?.[0]?.now))
-  .catch(err => {
-    console.error('❌ DB connection failed:', err.message);
-    console.error(err);
-  });
+// Create and export the Supabase client
+export const supabase = createClient(supabaseUrl, supabaseKey);
 
-// Primary query helper
-export const query = (text, params) => pool.query(text, params);
+// Test connection on startup
+async function testConnection() {
+  try {
+    const { data, error } = await supabase
+      .from('characters')
+      .select('count', { count: 'exact', head: true });
+    
+    if (error) {
+      console.warn('⚠️ Supabase connection test failed:', error.message);
+      console.warn('This might be because the characters table doesn\'t exist yet.');
+    } else {
+      console.log('✅ Supabase connected successfully');
+    }
+  } catch (err) {
+    console.error('❌ Supabase connection failed:', err.message);
+  }
+}
 
-// Back-compat facade so legacy `import { db }` still works
-export const db = { query, pool };
+// Run connection test
+testConnection();
 
-// Graceful shutdown
+// Export helper functions for backward compatibility
+export const query = async (text, params) => {
+  console.warn('⚠️ query() function is deprecated. Use supabase client directly.');
+  throw new Error('Direct SQL queries not supported with Supabase. Use the supabase client methods instead.');
+};
+
+// Legacy compatibility
+export const db = { 
+  query,
+  supabase // Expose supabase client through db object
+};
+
+// Graceful shutdown handler (though Supabase doesn't require explicit closing)
 for (const sig of ['SIGINT', 'SIGTERM']) {
   process.on(sig, async () => {
-    console.log('🔄 Shutting down database pool...');
-    try { await pool.end(); } finally { process.exit(0); }
+    console.log('🔄 Shutting down Supabase connections...');
+    // Supabase client handles cleanup automatically
+    process.exit(0);
   });
 }

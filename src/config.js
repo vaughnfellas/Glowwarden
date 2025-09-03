@@ -11,10 +11,10 @@ const num = (v, d) => (v == null || v === '' || Number.isNaN(Number(v)) ? d : Nu
 const list = (v) => (v ? String(v).split(/[,\s]+/).filter(Boolean) : []);
 
 export const config = {
-  // Core
+  // Core Discord
   CLIENT_ID: process.env.CLIENT_ID,
   BOT_USER_ID: process.env.BOT_USER_ID,
-  DISCORD_TOKEN: process.env.DISCORD_TOKEN,         // <-- make sure this is set
+  DISCORD_TOKEN: process.env.DISCORD_TOKEN,
   GUILD_ID: process.env.GUILD_ID,
   OWNER_IDS: list(process.env.OWNER_IDS),
 
@@ -40,7 +40,7 @@ export const config = {
 
   // Temp VC roles (normalize to names your code expects)
   ROLE_STRAY_SPORE_ID: process.env.STRAY_SPORE_ROLE_ID,
-  ROLE_HOST_ID: process.env.TEMP_HOST_ROLE_ID,      // env name -> normalized property
+  ROLE_HOST_ID: process.env.TEMP_HOST_ROLE_ID,
   HOST_ALERT_ROLE_ID: process.env.HOST_ALERT_ROLE_ID,
 
   // Temp VC settings
@@ -57,29 +57,48 @@ export const config = {
 
   NODE_ENV: process.env.NODE_ENV || 'development',
 
-  // Database / Supabase
-  DATABASE_URL: process.env.DATABASE_URL,
+  // Supabase (primary database)
   SUPABASE_URL: process.env.SUPABASE_URL,
   SUPABASE_SERVICE_KEY: process.env.SUPABASE_SERVICE_KEY,
   SUPABASE_ANON_KEY: process.env.SUPABASE_ANON_KEY,
+
+  // Legacy PostgreSQL (deprecated - remove if not used elsewhere)
+  DATABASE_URL: process.env.DATABASE_URL,
 };
 
-// Minimal required envs for boot
+// Required environment variables for core functionality
 const REQUIRED = [
   'DISCORD_TOKEN',
   'CLIENT_ID',
   'GUILD_ID',
   'RENT_WAR_CHAMBER_VC_ID',
   'BATTLEFRONT_CATEGORY_ID',
-  'ROLE_STRAY_SPORE_ID',   // normalized key
-  'ROLE_HOST_ID',          // normalized key
+  'ROLE_STRAY_SPORE_ID',
+  'ROLE_HOST_ID',
+  'SUPABASE_URL',           // Required for database
+  'SUPABASE_SERVICE_KEY',   // Required for database
 ];
 
 const missing = REQUIRED.filter((k) => !config[k]);
 if (missing.length) {
   console.error('[config] Missing required env keys:', missing.join(', '));
+  console.error('\n💡 Make sure you have set up your Supabase project and added these to your .env file:');
+  console.error('SUPABASE_URL=https://your-project.supabase.co');
+  console.error('SUPABASE_SERVICE_KEY=your-service-role-key');
+  
   // Fail fast in production; continue in dev if you prefer
   if (config.NODE_ENV !== 'development') {
     process.exit(1);
   }
 }
+
+// Validate Supabase URL format
+if (config.SUPABASE_URL && !config.SUPABASE_URL.includes('supabase.co')) {
+  console.warn('⚠️ SUPABASE_URL doesn\'t look like a valid Supabase URL');
+}
+
+console.log('📋 Config loaded:');
+console.log('- Environment:', config.NODE_ENV);
+console.log('- Discord Token:', config.DISCORD_TOKEN ? '✅ Present' : '❌ Missing');
+console.log('- Supabase URL:', config.SUPABASE_URL ? '✅ Present' : '❌ Missing');
+console.log('- Supabase Service Key:', config.SUPABASE_SERVICE_KEY ? '✅ Present' : '❌ Missing');
