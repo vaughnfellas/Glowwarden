@@ -20,3 +20,58 @@ Error [ERR_MODULE_NOT_FOUND]: Cannot find module '/home/node/src/interaction-han
 }
 
 Node.js v22.17.1
+
+------------------------------------------------------------
+Wed Sep 03 2025 13:49:03 GMT-0700 (Pacific Daylight Time)
+
+2025-09-03T11:16:03.459204494Z Registered command: decree
+2025-09-03T11:16:03.459533574Z Registered command: addalt
+2025-09-03T11:16:03.459660767Z Registered command: glowwarden
+2025-09-03T11:16:03.459735691Z Registered command: ids
+2025-09-03T11:16:03.459824611Z Registered command: perms
+2025-09-03T11:16:03.459868124Z Registered command: ping
+2025-09-03T11:16:03.459956543Z Registered command: status
+2025-09-03T11:16:03.460160022Z Registered command: vc-status
+2025-09-03T11:16:03.460326230Z Registered command: vc
+2025-09-03T11:16:03.460924565Z Registered command: generate-invite
+2025-09-03T11:16:03.460940646Z Registered command: switch
+2025-09-03T11:16:03.460946867Z Registered command: roster
+2025-09-03T11:16:03.460952999Z Registered command: deletealt
+2025-09-03T11:16:03.461083409Z Total commands registered: 13
+2025-09-03T11:16:03.461099930Z Token validation:
+2025-09-03T11:16:03.461264435Z - Token exists: [33mtrue[39m
+2025-09-03T11:16:03.461340681Z - Token length: [33m72[39m
+2025-09-03T11:16:03.461353596Z - Token starts with: MTQxMDQzND
+2025-09-03T11:16:03.777618433Z Loading commands...
+2025-09-03T11:16:03.777659201Z Commands loaded to client: 13 total
+2025-09-03T11:16:03.777667847Z Loading events...
+2025-09-03T11:16:03.777860766Z Attempting Discord login...
+2025-09-03T11:16:04.963226644Z ✅ DB up. Time: [35m2025-09-03T11:16:04.892Z[39m
+2025-09-03T11:16:05.067814097Z ✅ Login request sent to Discord
+2025-09-03T11:16:05.163166955Z 🟢 Shard 0 ready
+2025-09-03T11:16:05.163466408Z ✅ Ready as Glowwarden#7334
+2025-09-03T11:16:05.163768606Z Ready! Logged in as Glowwarden#7334
+2025-09-03T11:16:05.164439008Z Initializing temp VC service...
+2025-09-03T11:16:05.164512990Z Initializing invite role service...
+2025-09-03T11:16:05.164816490Z Started refreshing application (/) commands.
+2025-09-03T11:16:05.167843932Z Found 13 commands to deploy: [
+2025-09-03T11:16:05.167856296Z   [32m'decree'[39m,     [32m'addalt'[39m,
+2025-09-03T11:16:05.167863710Z   [32m'glowwarden'[39m, [32m'ids'[39m,
+2025-09-03T11:16:05.167870152Z   [32m'perms'[39m,      [32m'ping'[39m,
+2025-09-03T11:16:05.167876374Z   [32m'status'[39m,     [32m'vc-status'[39m,
+2025-09-03T11:16:05.167882396Z   [32m'vc'[39m,         [32m'generate-invite'[39m,
+2025-09-03T11:16:05.167888497Z   [32m'switch'[39m,     [32m'roster'[39m,
+2025-09-03T11:16:05.167894939Z   [32m'deletealt'[39m
+2025-09-03T11:16:05.167933072Z ]
+2025-09-03T11:16:05.168698757Z 🎯 Bot ready! Logged in as Glowwarden#7334
+2025-09-03T11:16:05.403983081Z Successfully reloaded 13 application (/) commands.
+2025-09-03T11:16:05.404125253Z Starting periodic cleanup...
+2025-09-03T11:16:05.406689899Z Periodic cleanup scheduled every 600 seconds
+2025-09-03T11:16:05.406709436Z Bot fully initialized and ready!
+2025-09-03T11:16:27.469062040Z (node:1) Warning: Supplying "ephemeral" for interaction response options is deprecated. Utilize flags instead.
+2025-09-03T11:16:27.469122776Z (Use `node --trace-warnings ...` to show where the warning was created)
+2025-09-03T11:45:50.301442989Z 🔄 Shard 0 resumed (replayed=1)
+2025-09-03T13:17:21.985778530Z 🔄 Shard 0 resumed (replayed=1)
+2025-09-03T16:25:24.480028304Z 🔄 Shard 0 resumed (replayed=1)
+2025-09-03T16:50:47.268157475Z (node:1) Warning: Supplying "fetchReply" for interaction response options is deprecated. Utilize "withResponse" instead or fetch the response after using the method.
+2025-09-03T19:43:33.962877308Z 🔄 Shard 0 resumed (replayed=1)

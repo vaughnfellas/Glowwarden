@@ -1,80 +1,101 @@
-// ============= src/commands/status.js =============
-import { SlashCommandBuilder, EmbedBuilder, PermissionFlagsBits } from 'discord.js';
+// src/commands/status.js
+import { SlashCommandBuilder } from 'discord.js';
+import { supabase } from '../db.js'; // Import supabase instead of pool
 import { config } from '../config.js';
-import { pool } from '../db.js';
-import { isOwner } from '../utils/owner.js';
 
 export const data = new SlashCommandBuilder()
   .setName('status')
-  .setDescription('Show bot status and health information')
-  .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild);
+  .setDescription('Check bot and database status');
 
 export async function execute(interaction) {
   try {
-    await interaction.deferReply({ ephemeral: true });
-
-    const client = interaction.client;
-    const guild = interaction.guild;
+    const startTime = Date.now();
     
-    // Basic bot info
-    const uptime = Math.floor(client.uptime / 1000);
-    const uptimeStr = `<t:${Math.floor(Date.now() / 1000) - uptime}:R>`;
+    // Test database connection with a simple query
+    const { data: testData, error } = await supabase
+      .from('characters')
+      .select('count', { count: 'exact', head: true });
     
-    // Guild info
-    const memberCount = guild.memberCount;
-    const channelCount = guild.channels.cache.size;
-    const roleCount = guild.roles.cache.size;
+    const dbLatency = Date.now() - startTime;
     
-    // Database health check
-    let dbStatus = '❌ Connection Failed';
-    let dbResponseTime = 'N/A';
-    try {
-      const start = Date.now();
-      await pool.query('SELECT 1');
-      dbResponseTime = `${Date.now() - start}ms`;
-      dbStatus = '✅ Connected';
-    } catch (error) {
-      console.error('Database health check failed:', error);
+    if (error) {
+      console.error('Database test failed:', error);
+      return interaction.reply({
+        content: `⚠️ **Status Check**\n\n` +
+                `Bot: ✅ Online\n` +
+                `Database: ❌ Connection failed\n` +
+                `Error: ${error.message}\n` +
+                `Latency: ${interaction.client.ws.ping}ms`,
+        ephemeral: true
+      });
     }
-
-    // Memory usage
-    const memUsage = process.memoryUsage();
-    const memMB = Math.round(memUsage.heapUsed / 1024 / 1024);
     
-    // Commands count
-    const commandCount = client.commands ? client.commands.size : 0;
-
-    const embed = new EmbedBuilder()
-      .setColor(0x00ff00)
-      .setTitle('🤖 Glowwarden Status')
-      .addFields(
-        { name: '⏰ Uptime', value: uptimeStr, inline: true },
-        { name: '🧠 Memory', value: `${memMB}MB`, inline: true },
-        { name: '⚡ Ping', value: `${client.ws.ping}ms`, inline: true },
-        { name: '🏰 Guild Info', value: `${memberCount} members\n${channelCount} channels\n${roleCount} roles`, inline: true },
-        { name: '🗄️ Database', value: `${dbStatus}\n${dbResponseTime}`, inline: true },
-        { name: '⚙️ Commands', value: `${commandCount} loaded`, inline: true }
-      )
-      .setTimestamp()
-      .setFooter({ text: `Node.js ${process.version}` });
-
-    // Add owner-only info if user is owner
-    if (isOwner(interaction.user.id)) {
-      embed.addFields(
-        { name: '🔧 Environment', value: `NODE_ENV: ${process.env.NODE_ENV || 'development'}\nPORT: ${config.PORT}`, inline: true }
-      );
-    }
-
-    await interaction.editReply({ embeds: [embed] });
-
+    // Get character count for additional info
+    const { count: characterCount } = testData || { count: 0 };
+    
+    const statusEmbed = {
+      title: '🤖 Bot Status',
+      color: 0x00ff00, // Green
+      fields: [
+        {
+          name: '🟢 Bot Status',
+          value: 'Online and operational',
+          inline: true
+        },
+        {
+          name: '🗄️ Database Status', 
+          value: `Connected to Supabase\nLatency: ${dbLatency}ms`,
+          inline: true
+        },
+        {
+          name: '📊 Stats',
+          value: `Characters: ${characterCount}\nPing: ${interaction.client.ws.ping}ms`,
+          inline: true
+        },
+        {
+          name: '🔧 Environment',
+          value: config.NODE_ENV || 'unknown',
+          inline: true
+        },
+        {
+          name: '⏰ Uptime',
+          value: formatUptime(process.uptime()),
+          inline: true
+        }
+      ],
+      timestamp: new Date().toISOString(),
+      footer: {
+        text: 'Holy Gehy Empire Bot'
+      }
+    };
+    
+    await interaction.reply({ 
+      embeds: [statusEmbed],
+      ephemeral: true 
+    });
+    
   } catch (error) {
-    console.error('Status command error:', error);
-    const content = '❌ Failed to get bot status.';
-    
-    if (interaction.deferred) {
-      return interaction.editReply({ content });
-    } else {
-      return interaction.reply({ content, ephemeral: true });
-    }
+    console.error('Status command failed:', error);
+    await interaction.reply({
+      content: `❌ **Status Check Failed**\n\nError: ${error.message}`,
+      ephemeral: true
+    });
+  }
+}
+
+function formatUptime(seconds) {
+  const days = Math.floor(seconds / 86400);
+  const hours = Math.floor((seconds % 86400) / 3600);
+  const minutes = Math.floor((seconds % 3600) / 60);
+  const secs = Math.floor(seconds % 60);
+  
+  if (days > 0) {
+    return `${days}d ${hours}h ${minutes}m`;
+  } else if (hours > 0) {
+    return `${hours}h ${minutes}m ${secs}s`;
+  } else if (minutes > 0) {
+    return `${minutes}m ${secs}s`;
+  } else {
+    return `${secs}s`;
   }
 }

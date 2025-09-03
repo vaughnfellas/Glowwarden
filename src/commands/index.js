@@ -3,7 +3,7 @@
 // Collect all command modules that live in THIS folder (./)
 
 import * as decree from './decree.js';
-import * as addalt from './addalt.js';
+import * as alt from './alt.js';  // New unified alt command
 import * as glowwarden from './glowwarden.js';
 import * as ids from './ids.js';
 import * as perms from './perms.js';
@@ -19,7 +19,7 @@ export const commands = new Map();
 // Array of all command modules
 const commandModules = [
   decree,
-  addalt,
+  alt,        // Single unified alt command
   glowwarden,
   ids,
   perms,
@@ -40,34 +40,6 @@ commandModules.forEach((mod) => {
     console.warn('Invalid command module found:', mod);
   }
 });
-
-// Register additional commands from addalt.js that export multiple commands
-if (addalt.switchData && typeof addalt.executeSwitch === 'function') {
-  const switchCommand = {
-    data: addalt.switchData,
-    execute: addalt.executeSwitch
-  };
-  commands.set('switch', switchCommand);
-  console.log('Registered command: switch');
-}
-
-if (addalt.rosterData && typeof addalt.executeRoster === 'function') {
-  const rosterCommand = {
-    data: addalt.rosterData,
-    execute: addalt.executeRoster
-  };
-  commands.set('roster', rosterCommand);
-  console.log('Registered command: roster');
-}
-
-if (addalt.deleteAltData && typeof addalt.executeDeleteAlt === 'function') {
-  const deleteAltCommand = {
-    data: addalt.deleteAltData,
-    execute: addalt.executeDeleteAlt
-  };
-  commands.set('deletealt', deleteAltCommand);
-  console.log('Registered command: deletealt');
-}
 
 console.log(`Total commands registered: ${commands.size}`);
 
