@@ -3,6 +3,8 @@ import { Events, PermissionFlagsBits, EmbedBuilder } from 'discord.js';
 import { config } from '../config.js';
 import { CHANNELS } from '../channels.js';
 import { handleTempVCInviteJoin, tempInvites } from './temp-vc-service.js';
+import { getDynamicInviteMap, loadInviteMappingsFromDB } from '../commands/generate-invite.js';
+import { InviteDB } from '../database/invites.js';
 
 const cache = new Map(); // guildId -> Map<code, uses>
 
@@ -81,6 +83,13 @@ function isWarChamberInvite(code) {
   return false;
 }
 
+// Check if a role ID is a base role that requires oath ceremony
+function isBaseRole(roleId) {
+  return roleId === config.ROLE_BASE_MEMBER || 
+         roleId === config.ROLE_BASE_OFFICER || 
+         roleId === config.ROLE_BASE_VETERAN;
+}
+
 async function assignRoleForCode(member, code) {
   // First, check if this is a War Chamber invite
   if (code && isWarChamberInvite(code)) {
@@ -93,7 +102,59 @@ async function assignRoleForCode(member, code) {
     };
   }
   
-  // Handle regular member/officer/vet invites
+  // Second, check database for invite mapping
+  if (code) {
+    try {
+      const mapping = await InviteDB.getInviteMapping(code);
+      if (mapping) {
+        const roleId = mapping.role_id;
+        const role = member.guild.roles.cache.get(roleId);
+        if (!role) return { assigned: false, type: 'mapping' };
+        
+        try {
+          await member.roles.add(role);
+          
+          // If this is a base role, start oath ceremony
+          if (isBaseRole(roleId)) {
+            await startOathCeremony(member, roleId);
+            return { assigned: true, type: 'member_oath', roleId };
+          }
+          
+          return { assigned: true, type: 'db_mapping', roleId };
+        } catch (error) {
+          console.error('Failed to assign role from database mapping:', error);
+          return { assigned: false, type: 'mapping' };
+        }
+      }
+    } catch (error) {
+      console.error('Error checking database for invite mapping:', error);
+    }
+  }
+  
+  // Third, check dynamic invite map (in-memory)
+  const dynamicMap = getDynamicInviteMap();
+  if (code && dynamicMap.has(code)) {
+    const roleId = dynamicMap.get(code);
+    const role = member.guild.roles.cache.get(roleId);
+    if (!role) return { assigned: false, type: 'mapping' };
+    
+    try {
+      await member.roles.add(role);
+      
+      // If this is a base role, start oath ceremony
+      if (isBaseRole(roleId)) {
+        await startOathCeremony(member, roleId);
+        return { assigned: true, type: 'member_oath', roleId };
+      }
+      
+      return { assigned: true, type: 'dynamic_mapping', roleId };
+    } catch (error) {
+      console.error('Failed to assign role from dynamic mapping:', error);
+      return { assigned: false, type: 'mapping' };
+    }
+  }
+  
+  // Last resort: check config.INVITE_ROLE_MAP (legacy support)
   const roleId = config.INVITE_ROLE_MAP?.[code] || config.INVITE_DEFAULT_ROLE_ID;
   if (!roleId) return { assigned: false, type: 'none' };
   
@@ -103,23 +164,37 @@ async function assignRoleForCode(member, code) {
   try {
     await member.roles.add(role);
     
-    // If this is a "member" invite (base member role), start oath ceremony
-    if (roleId === config.ROLE_BASE_MEMBER) {
+    // If this is a base role, start oath ceremony
+    if (isBaseRole(roleId)) {
       await startOathCeremony(member, roleId);
       return { assigned: true, type: 'member_oath', roleId };
     }
     
-    return { assigned: true, type: 'mapping', roleId };
+    return { assigned: true, type: 'config_mapping', roleId };
   } catch (error) {
-    console.error('Failed to assign role:', error);
+    console.error('Failed to assign role from config mapping:', error);
     return { assigned: false, type: 'mapping' };
   }
 }
 
 export function initInviteRoleService(client) {
   client.on(Events.ClientReady, async () => {
-    for (const guild of client.guilds.cache.values()) await refreshGuildInvites(guild);
-    console.log('Invite role service initialized');
+    try {
+      // Load invite mappings from database
+      await loadInviteMappingsFromDB();
+      
+      // Clean up expired invites
+      await InviteDB.cleanupExpiredInvites();
+      
+      // Refresh invite cache
+      for (const guild of client.guilds.cache.values()) {
+        await refreshGuildInvites(guild);
+      }
+      
+      console.log('Invite role service initialized');
+    } catch (error) {
+      console.error('Failed to initialize invite role service:', error);
+    }
   });
 
   client.on(Events.InviteCreate, (invite) => {
@@ -129,11 +204,24 @@ export function initInviteRoleService(client) {
     cache.set(g.id, m);
   });
 
-  client.on(Events.InviteDelete, (invite) => {
+  client.on(Events.InviteDelete, async (invite) => {
     const g = invite.guild; if (!g) return;
     const m = cache.get(g.id) ?? new Map();
     m.delete(invite.code);
     cache.set(g.id, m);
+    
+    // Remove from database if it exists
+    try {
+      await InviteDB.removeInviteMapping(invite.code);
+    } catch (error) {
+      console.error('Failed to remove invite mapping from database:', error);
+    }
+    
+    // Remove from dynamic map
+    const dynamicMap = getDynamicInviteMap();
+    if (dynamicMap.has(invite.code)) {
+      dynamicMap.delete(invite.code);
+    }
   });
 
   client.on(Events.GuildMemberAdd, async (member) => {
@@ -169,4 +257,13 @@ export function initInviteRoleService(client) {
       console.warn('invite-role service error:', e?.message);
     }
   });
+  
+  // Set up periodic cleanup of expired invites
+  setInterval(async () => {
+    try {
+      await InviteDB.cleanupExpiredInvites();
+    } catch (error) {
+      console.error('Failed to clean up expired invites:', error);
+    }
+  }, 3600000); // Run every hour
 }

@@ -1,264 +1,237 @@
-// ============= src/commands/addalt.js =============
+// commands/addalt.js - Character management commands
 import { 
   SlashCommandBuilder, 
-  ModalBuilder, 
-  TextInputBuilder, 
+  ActionRowBuilder, 
+  StringSelectMenuBuilder, 
+  StringSelectMenuOptionBuilder,
+  ModalBuilder,
+  TextInputBuilder,
   TextInputStyle,
-  ActionRowBuilder,
-  StringSelectMenuBuilder,
-  MessageFlags,
-  EmbedBuilder,
   ButtonBuilder,
-  ButtonStyle
+  ButtonStyle,
+  EmbedBuilder
 } from 'discord.js';
 import { CharacterDB } from '../database/characters.js';
 
-export const data = new SlashCommandBuilder()
-.setName('addalt')
-.setDescription('Add a new character to your roster');
-
-export async function execute(interaction) {
-// Show class selection dropdown first
-const classOptions = [
-  { label: '⚔️ Warrior', value: 'Warrior', emoji: '⚔️' },
-  { label: '🛡️ Paladin', value: 'Paladin', emoji: '🛡️' },
-  { label: '🏹 Hunter', value: 'Hunter', emoji: '🏹' },
-  { label: '🗡️ Rogue', value: 'Rogue', emoji: '🗡️' },
-  { label: '✨ Priest', value: 'Priest', emoji: '✨' },
-  { label: '⚡ Shaman', value: 'Shaman', emoji: '⚡' },
-  { label: '🔥 Mage', value: 'Mage', emoji: '🔥' },
-  { label: '💀 Warlock', value: 'Warlock', emoji: '💀' },
-  { label: '🌿 Druid', value: 'Druid', emoji: '🌿' },
-  { label: '❓ Classless', value: 'none', emoji: '❓' },
+// Class options for WoW
+const CLASS_OPTIONS = [
+  { name: 'Death Knight', value: 'Death Knight', emoji: '💀' },
+  { name: 'Demon Hunter', value: 'Demon Hunter', emoji: '👹' },
+  { name: 'Druid', value: 'Druid', emoji: '🐻' },
+  { name: 'Evoker', value: 'Evoker', emoji: '🐉' },
+  { name: 'Hunter', value: 'Hunter', emoji: '🏹' },
+  { name: 'Mage', value: 'Mage', emoji: '🔮' },
+  { name: 'Monk', value: 'Monk', emoji: '🧘' },
+  { name: 'Paladin', value: 'Paladin', emoji: '🛡️' },
+  { name: 'Priest', value: 'Priest', emoji: '✨' },
+  { name: 'Rogue', value: 'Rogue', emoji: '🗡️' },
+  { name: 'Shaman', value: 'Shaman', emoji: '⚡' },
+  { name: 'Warlock', value: 'Warlock', emoji: '🔥' },
+  { name: 'Warrior', value: 'Warrior', emoji: '⚔️' },
+  { name: 'None/Other', value: 'none', emoji: '❓' }
 ];
 
-const selectMenu = new StringSelectMenuBuilder()
-  .setCustomId(`addalt_class:${interaction.user.id}`)
-  .setPlaceholder('⚔️ Choose your character\'s class...')
-  .addOptions(classOptions);
+// Command to add an alt character
+export const data = new SlashCommandBuilder()
+  .setName('addalt')
+  .setDescription('Add an alternate character to your profile');
 
-const row = new ActionRowBuilder().addComponents(selectMenu);
+// Command to switch main character
+export const switchData = new SlashCommandBuilder()
+  .setName('switch')
+  .setDescription('Switch your active character')
+  .addStringOption(option =>
+    option.setName('character')
+      .setDescription('Character to switch to')
+      .setRequired(true)
+      .setAutocomplete(true)
+  );
 
-await interaction.reply({
-  content: '🎭 **Adding a new character to your roster!**\nFirst, choose your class:',
-  components: [row],
-  flags: MessageFlags.Ephemeral,
-});
-}
-
-// ============= Character Details Modal =============
-export function createAddAltModal(selectedClass, userId) {
-const className = selectedClass === 'none' ? 'Classless' : selectedClass;
-
-const modal = new ModalBuilder()
-  .setCustomId(`addalt_modal:${userId}:${selectedClass}`)
-  .setTitle(`🎭 Register ${className} Character`);
-
-const nameInput = new TextInputBuilder()
-  .setCustomId('character_name')
-  .setLabel('Character Name')
-  .setStyle(TextInputStyle.Short)
-  .setPlaceholder(`Enter your ${className === 'Classless' ? '' : className + ' '}character's name`)
-  .setRequired(true)
-  .setMaxLength(32);
-
-const realmInput = new TextInputBuilder()
-  .setCustomId('character_realm')
-  .setLabel('Realm (Optional)')
-  .setStyle(TextInputStyle.Short)
-  .setPlaceholder('Which server is this character on?')
-  .setRequired(false)
-  .setMaxLength(30);
-
-const mainInput = new TextInputBuilder()
-  .setCustomId('is_main')
-  .setLabel('Is this your main character?')
-  .setStyle(TextInputStyle.Short)
-  .setPlaceholder('Type "yes" if this is your main, or leave blank for alt')
-  .setRequired(false)
-  .setMaxLength(3);
-
-const firstRow = new ActionRowBuilder().addComponents(nameInput);
-const secondRow = new ActionRowBuilder().addComponents(realmInput);
-const thirdRow = new ActionRowBuilder().addComponents(mainInput);
-
-modal.addComponents(firstRow, secondRow, thirdRow);
-return modal;
-}
-
-// ============= Roster Command =============
+// Command to view character roster
 export const rosterData = new SlashCommandBuilder()
-.setName('roster')
-.setDescription('View your character roster');
+  .setName('roster')
+  .setDescription('View your character roster');
 
-export async function executeRoster(interaction) {
-const userId = interaction.user.id;
-const characters = await CharacterDB.getCharacters(userId); // FIXED: Added await
-
-if (characters.length === 0) {
-  return interaction.reply({
-    content: '⛔ You haven\'t registered any characters yet. Use `/addalt` to register characters.',
-    flags: MessageFlags.Ephemeral,
-  });
-}
-
-const embed = new EmbedBuilder()
-  .setColor(0x3498db)
-  .setTitle('🎭 Your Character Roster')
-  .setDescription(characters.map(char => {
-    const mainIcon = char.isMain ? '👑 ' : '';
-    const classText = char.class ? ` - ${char.class}` : '';
-    const realmText = char.realm ? ` of ${char.realm}` : '';
-    return `${mainIcon}**${char.name}**${classText}${realmText}`;
-  }).join('\n'))
-  .setFooter({ text: `Total characters: ${characters.length}` });
-
-await interaction.reply({ embeds: [embed], flags: MessageFlags.Ephemeral });
-}
-
-// ============= Delete Alt Command =============
+// Command to delete an alt character
 export const deleteAltData = new SlashCommandBuilder()
-.setName('deletealt')
-.setDescription('Delete a character from your roster')
-.addStringOption(option =>
-  option.setName('character')
-    .setDescription('Which character to delete')
+  .setName('deletealt')
+  .setDescription('Delete a character from your roster')
+  .addStringOption(option =>
+    option.setName('character')
+      .setDescription('Character to delete')
+      .setRequired(true)
+      .setAutocomplete(true)
+  );
+
+// Create the class selection menu
+function createClassSelectionMenu(userId) {
+  const options = CLASS_OPTIONS.map(classOption => 
+    new StringSelectMenuOptionBuilder()
+      .setLabel(classOption.name)
+      .setValue(classOption.value)
+      .setEmoji(classOption.emoji)
+  );
+
+  const select = new StringSelectMenuBuilder()
+    .setCustomId(`addalt_class:${userId}`)
+    .setPlaceholder('Select your character class')
+    .addOptions(options);
+
+  return new ActionRowBuilder().addComponents(select);
+}
+
+// Create the addalt modal
+export function createAddAltModal(selectedClass, userId) {
+  const modal = new ModalBuilder()
+    .setCustomId(`addalt_modal:${userId}:${selectedClass}`)
+    .setTitle('Add Character');
+
+  const characterInput = new TextInputBuilder()
+    .setCustomId('character_name')
+    .setLabel('Character Name')
+    .setStyle(TextInputStyle.Short)
+    .setPlaceholder('Enter your character name')
     .setRequired(true)
-    .setAutocomplete(true)
-);
+    .setMaxLength(32);
 
-export async function executeDeleteAlt(interaction) {
-const characterName = interaction.options.getString('character', true);
-const userId = interaction.user.id;
+  const realmInput = new TextInputBuilder()
+    .setCustomId('character_realm')
+    .setLabel('Realm (Optional)')
+    .setStyle(TextInputStyle.Short)
+    .setPlaceholder('e.g., Stormrage, Tichondrius')
+    .setRequired(false)
+    .setMaxLength(30);
 
-if (!(await CharacterDB.characterExists(userId, characterName))) { // FIXED: Added await
-  return interaction.reply({
-    content: `⛔ You don't have a character named **${characterName}**.`,
-    flags: MessageFlags.Ephemeral,
+  const isMainInput = new TextInputBuilder()
+    .setCustomId('is_main')
+    .setLabel('Set as Main Character? (yes/no)')
+    .setStyle(TextInputStyle.Short)
+    .setPlaceholder('yes or no')
+    .setRequired(true)
+    .setValue('no')
+    .setMaxLength(3);
+
+  const firstRow = new ActionRowBuilder().addComponents(characterInput);
+  const secondRow = new ActionRowBuilder().addComponents(realmInput);
+  const thirdRow = new ActionRowBuilder().addComponents(isMainInput);
+
+  modal.addComponents(firstRow, secondRow, thirdRow);
+  return modal;
+}
+
+// Execute addalt command
+export async function execute(interaction) {
+  const userId = interaction.user.id;
+  const row = createClassSelectionMenu(userId);
+  
+  await interaction.reply({
+    content: '🎭 **Character Registration**\nSelect your character\'s class:',
+    components: [row],
+    ephemeral: true
   });
 }
 
-const character = await CharacterDB.getCharacter(userId, characterName); // FIXED: Added await
+// Execute switch command
+export async function executeSwitch(interaction) {
+  const userId = interaction.user.id;
+  const characterName = interaction.options.getString('character');
+  
+  // Check if character exists
+  const character = await CharacterDB.getCharacter(userId, characterName);
+  if (!character) {
+    return interaction.reply({
+      content: `❌ Character **${characterName}** not found in your roster.`,
+      ephemeral: true
+    });
+  }
+  
+  // Set as main character
+  await CharacterDB.setMainCharacter(userId, characterName);
+  
+  // Update nickname
+  try {
+    const member = interaction.member;
+    await member.setNickname(characterName);
+  } catch (error) {
+    console.log(`No permission to set nickname for ${interaction.user.tag}:`, error.message);
+  }
+  
+  return interaction.reply({
+    content: `✅ Switched to **${characterName}** as your main character!`,
+    ephemeral: true
+  });
+}
 
-// Create confirmation buttons
-const row = new ActionRowBuilder()
-  .addComponents(
+// Execute roster command
+export async function executeRoster(interaction) {
+  const userId = interaction.user.id;
+  
+  // Get all characters
+  const characters = await CharacterDB.getCharacters(userId);
+  
+  if (characters.length === 0) {
+    return interaction.reply({
+      content: '❌ You have no characters registered. Use `/addalt` to add characters.',
+      ephemeral: true
+    });
+  }
+  
+  // Create embed
+  const embed = new EmbedBuilder()
+    .setTitle('🎭 Your Character Roster')
+    .setColor(0x8B4513)
+    .setDescription(`You have ${characters.length} character(s) registered.`);
+  
+  // Add fields for each character
+  for (const char of characters) {
+    const mainTag = char.isMain ? '👑 **MAIN**' : '';
+    const classText = char.class ? `**Class:** ${char.class}` : '';
+    const realmText = char.realm ? `**Realm:** ${char.realm}` : '';
+    
+    const details = [mainTag, classText, realmText].filter(Boolean).join('\n');
+    
+    embed.addFields({
+      name: char.name,
+      value: details || 'No additional details',
+      inline: true
+    });
+  }
+  
+  return interaction.reply({
+    embeds: [embed],
+    ephemeral: true
+  });
+}
+
+// Execute deletealt command
+export async function executeDeleteAlt(interaction) {
+  const userId = interaction.user.id;
+  const characterName = interaction.options.getString('character');
+  
+  // Check if character exists
+  const character = await CharacterDB.getCharacter(userId, characterName);
+  if (!character) {
+    return interaction.reply({
+      content: `❌ Character **${characterName}** not found in your roster.`,
+      ephemeral: true
+    });
+  }
+  
+  // Create confirmation buttons
+  const row = new ActionRowBuilder().addComponents(
     new ButtonBuilder()
       .setCustomId(`confirm_delete:${userId}:${encodeURIComponent(characterName)}`)
-      .setLabel('Yes, delete this character')
+      .setLabel('Delete Character')
       .setStyle(ButtonStyle.Danger),
     new ButtonBuilder()
-      .setCustomId(`cancel_delete:${userId}:${encodeURIComponent(characterName)}`)
+      .setCustomId(`cancel_delete:${userId}`)
       .setLabel('Cancel')
       .setStyle(ButtonStyle.Secondary)
   );
-
-const mainWarning = character.isMain ? 
-  '\n\n⚠️ **Warning**: This is your main character. Deleting it will require you to set a new main.' : '';
-
-await interaction.reply({
-  content: `Are you sure you want to delete **${characterName}**?${mainWarning}`,
-  components: [row],
-  flags: MessageFlags.Ephemeral,
-});
-}
-
-// ============= Switch Command =============
-export const switchData = new SlashCommandBuilder()
-.setName('switch')
-.setDescription('Switch to one of your characters')
-.addStringOption(option =>
-  option.setName('character')
-    .setDescription('Which character to switch to')
-    .setRequired(true)
-    .setAutocomplete(true)
-);
-
-export async function executeSwitch(interaction) {
-const characterChoice = interaction.options.getString('character', true);
-const member = interaction.member;
-const userId = member.user.id;
-
-const characters = await CharacterDB.getCharacters(userId); // FIXED: Added await
-if (characters.length === 0) {
-  return interaction.reply({
-    content: '⛔ You haven\'t registered any characters yet. Use `/addalt` to register characters.',
-    flags: MessageFlags.Ephemeral,
-  });
-}
-
-const character = characters.find(c => 
-  c.name.toLowerCase() === characterChoice.toLowerCase()
-);
-
-if (!character) {
-  return interaction.reply({
-    content: '⛔ I couldn\'t find that character in your roster.',
-    flags: MessageFlags.Ephemeral,
-  });
-}
-
-try {
-  const oldName = member.displayName;
-  await member.setNickname(character.name);
-
-  const classText = character.class && character.class !== 'none' ? `, ${character.class}` : '';
-  const realmText = character.realm ? ` of ${character.realm}` : '';
   
-  const embed = new EmbedBuilder()
-    .setColor(character.isMain ? 0xFFD700 : 0x8B4513)
-    .setTitle(character.isMain ? '👑 **Main Character Active**' : '🎭 **Alt Character Switch**')
-    .setDescription(`
-*${oldName} steps into the shadows as **${character.name}${classText}${realmText}** emerges into the light.*
-
-${character.isMain ? 
-'*Your main character has taken the field. The guild banner flies proudly.*' : 
-'*Your alt is ready for adventure. May this persona serve you well.*'}
-    `)
-    .setTimestamp()
-    .setFooter({ text: 'Use /switch anytime to change characters!' });
-
-  await interaction.reply({ embeds: [embed], flags: MessageFlags.Ephemeral });
-
-} catch (error) {
-  console.error('Character switch failed:', error);
-  await interaction.reply({
-    content: '⛔ I couldn\'t switch your character. Contact a guild officer.',
-    flags: MessageFlags.Ephemeral,
+  return interaction.reply({
+    content: `⚠️ Are you sure you want to delete **${characterName}**? This cannot be undone.`,
+    components: [row],
+    ephemeral: true
   });
-}
-}
-
-export async function autocompleteSwitchCharacters(interaction) {
-const focused = (interaction.options.getFocused() || '').toLowerCase();
-const userId = interaction.user.id;
-const characters = await CharacterDB.getCharacters(userId); // FIXED: Added await
-
-if (characters.length === 0) {
-  return interaction.respond([
-    { name: "No characters registered - use /addalt", value: "none" }
-  ]);
-}
-
-const choices = characters
-  .filter(char => {
-    const searchText = `${char.name} ${char.class || ''}`.toLowerCase();
-    return !focused || searchText.includes(focused);
-  })
-  .map(char => {
-    const classText = char.class && char.class !== 'none' ? ` (${char.class})` : '';
-    const mainIcon = char.isMain ? ' 👑' : '';
-    return { 
-      name: `${char.name}${classText}${mainIcon}`, 
-      value: char.name 
-    };
-  })
-  .slice(0, 25);
-
-await interaction.respond(choices);
-}
-
-export async function autocompleteDeleteCharacters(interaction) {
-// Reuse the same autocomplete function for both switch and delete
-return autocompleteSwitchCharacters(interaction);
 }

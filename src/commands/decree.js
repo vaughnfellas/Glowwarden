@@ -1,4 +1,4 @@
-// ============= src/commands/decree.js =============
+// decree.js - Command to post the Imperial Decree with flair buttons
 import {
   SlashCommandBuilder,
   PermissionFlagsBits,
@@ -9,7 +9,7 @@ import {
   MessageFlags,
 } from 'discord.js';
 import { checkOwnerPermission } from '../utils/owner.js';
-import { CHANNELS } from '../channels.js';
+import { CHANNELS } from './channels.js';
 
 export const data = new SlashCommandBuilder()
   .setName('decree')

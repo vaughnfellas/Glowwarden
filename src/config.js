@@ -1,5 +1,6 @@
 // ============= src/config.js =============
 import 'dotenv/config';
+import { CHANNELS } from './channels.js';
 
 const toBool = (v, d = false) => {
   if (v === undefined || v === null || v === '') return d;
@@ -27,27 +28,33 @@ export const config = {
   DISCORD_TOKEN: process.env.DISCORD_TOKEN || '',
   CLIENT_ID: process.env.CLIENT_ID || '',
   GUILD_ID: snowflake(process.env.GUILD_ID),
+  BOT_USER_ID: snowflake(process.env.BOT_USER_ID),
 
   // Owner IDs
   OWNER_IDS: process.env.OWNER_IDS?.split(',').map(id => id.trim()) || [],
-  OWNER_ID: process.env.OWNER_IDS?.split(',')[0]?.trim() || '', // First owner for backward compatibility
+  OWNER_ID: process.env.OWNER_IDS?.split(',')[0]?.trim() || '',
 
-  // Core channels
-  DECREE_CHANNEL_ID: process.env.DECREE_CHANNEL_ID || '1409822706299306004', // Chamber of Oaths
-  LOG_CHANNEL_ID: process.env.LOG_CHANNEL_ID || '1410345650054234172', // Hall of Records
+  // Core channels - prefer .env, fallback to channels.js
+  DECREE_CHANNEL_ID: process.env.DECREE_CHANNEL_ID || CHANNELS.CHAMBER_OF_OATHS,
+  LOG_CHANNEL_ID: process.env.LOG_CHANNEL_ID || CHANNELS.HALL_OF_RECORDS,
+  
+  // Temp VC settings - use spec naming with fallbacks
+  RENT_WAR_CHAMBER_VC_ID: process.env.RENT_WAR_CHAMBER_VC_ID || process.env.LOBBY_VC_ID || CHANNELS.RENT_A_WAR_CHAMBER,
+  BATTLEFRONT_CATEGORY_ID: process.env.BATTLEFRONT_CATEGORY_ID || process.env.TEMP_VC_CATEGORY_ID || CHANNELS.BATTLEFRONT,
+  EMPTY_MINUTES: toInt(process.env.EMPTY_MINUTES, 5),
   
   // Server settings
   PORT: toInt(process.env.PORT, 3000),
-
-  // Temp VC settings
   TEMP_VC_DELETE_AFTER: toInt(process.env.TEMP_VC_DELETE_AFTER, 300), // 5 minutes
-  TEMP_VC_USER_LIMIT: toInt(process.env.TEMP_VC_USER_LIMIT, 0) || undefined, // 0 = no limit
-  TEMP_VC_NAME_FMT: process.env.TEMP_VC_NAME_FMT || 'War Chamber – {user}',
-  SWEEP_INTERVAL_SEC: toInt(process.env.SWEEP_INTERVAL_SEC, 600), // 10 minutes
+  TEMP_VC_USER_LIMIT: toInt(process.env.TEMP_VC_USER_LIMIT, 0) || undefined,
+  TEMP_VC_NAME_FMT: process.env.TEMP_VC_NAME_FMT || 'War Chamber — {user}',
+  SWEEP_INTERVAL_SEC: toInt(process.env.SWEEP_INTERVAL_SEC, 600),
 
-  // Role IDs
-  TEMP_HOST_ROLE_ID: snowflake(process.env.TEMP_HOST_ROLE_ID),
-  STRAY_SPORE_ROLE_ID: snowflake(process.env.STRAY_SPORE_ROLE_ID),
+  // Role IDs - use spec naming
+  ROLE_HOST_ID: snowflake(process.env.TEMP_HOST_ROLE_ID), // Temp host role
+  TEMP_HOST_ROLE_ID: snowflake(process.env.TEMP_HOST_ROLE_ID), // Keep backward compatibility
+  ROLE_STRAY_SPORE_ID: snowflake(process.env.STRAY_SPORE_ROLE_ID),
+  STRAY_SPORE_ROLE_ID: snowflake(process.env.STRAY_SPORE_ROLE_ID), // Keep backward compatibility
   
   // Base roles
   ROLE_BASE_MEMBER: snowflake(process.env.ROLE_BASE_MEMBER),
@@ -69,11 +76,21 @@ export const config = {
   // Ceremony settings
   CEREMONY_REMOVE_BASE_ON_FINAL: toBool(process.env.CEREMONY_REMOVE_BASE_ON_FINAL, true),
 
-  // Invite → role mapping (BetterInvites-lite)
+  // Invite → role mapping
   INVITE_ROLE_MAP: parseInviteRoleMap(process.env.INVITE_ROLE_MAP),
   INVITE_DEFAULT_ROLE_ID: snowflake(process.env.INVITE_DEFAULT_ROLE_ID),
 
-  // Legacy settings (kept for compatibility)
+  // Legacy settings
   MAX_USES: toInt(process.env.MAX_USES, 10),
   DEFAULT_USES: toInt(process.env.DEFAULT_USES, 4),
 };
+
+// Validation and warnings
+console.log('=== Config Validation ===');
+console.log('GUILD_ID:', config.GUILD_ID || '❌ MISSING');
+console.log('BOT_USER_ID:', config.BOT_USER_ID || '❌ MISSING');
+console.log('RENT_WAR_CHAMBER_VC_ID:', config.RENT_WAR_CHAMBER_VC_ID || '❌ MISSING');
+console.log('BATTLEFRONT_CATEGORY_ID:', config.BATTLEFRONT_CATEGORY_ID || '❌ MISSING');
+console.log('ROLE_HOST_ID:', config.ROLE_HOST_ID || '❌ MISSING');
+console.log('ROLE_STRAY_SPORE_ID:', config.ROLE_STRAY_SPORE_ID || '❌ MISSING');
+console.log('========================');

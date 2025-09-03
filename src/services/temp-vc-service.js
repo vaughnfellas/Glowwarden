@@ -12,6 +12,7 @@ import {
 } from 'discord.js';
 import { CHANNELS } from '../channels.js';
 import { config } from '../config.js';
+import { isOwner } from '../utils/owner.js';
 
 // State tracking
 export const tempOwners = new Map();
@@ -50,20 +51,6 @@ export function scheduleDeleteIfEmpty(channelId, guild) {
             }
           } catch (e) {
             console.error('Remove Host role failed:', e);
-          }
-        }
-
-        // Clean up associated text channel
-        const inviteData = tempInvites.get(channelId);
-        if (inviteData?.textChannelId) {
-          try {
-            const textChannel = guild.channels.cache.get(inviteData.textChannelId);
-            if (textChannel) {
-              await textChannel.delete('War Chamber closed - cleaning up text channel');
-              console.log(`Deleted associated text channel: ${textChannel.name}`);
-            }
-          } catch (e) {
-            console.error('Failed to delete associated text channel:', e);
           }
         }
 
@@ -108,18 +95,6 @@ export async function sweepTempRooms() {
             if (owner?.roles.cache.has(config.TEMP_HOST_ROLE_ID)) {
               await owner.roles.remove(config.TEMP_HOST_ROLE_ID);
               console.log(`Host role removed from ${owner.user.tag} (sweep cleanup)`);
-            }
-          } catch {}
-        }
-
-        // Clean up associated text channel
-        const inviteData = tempInvites.get(ch.id);
-        if (inviteData?.textChannelId) {
-          try {
-            const textChannel = guild.channels.cache.get(inviteData.textChannelId);
-            if (textChannel) {
-              await textChannel.delete('Periodic sweep: War Chamber closed');
-              console.log(`Sweep deleted text channel: ${textChannel.name}`);
             }
           } catch {}
         }
@@ -255,107 +230,38 @@ async function sendInviteDM(member, invite, voiceChannel) {
   }
 }
 
-async function postInviteMessage(voiceChannel, invite, member) {
+// New function to post invite to voice channel chat
+async function postInviteToVoiceChat(voiceChannel, invite, member) {
   try {
-    const guild = voiceChannel.guild;
-    const textChannelName = voiceChannel.name.toLowerCase().replace(/[^a-z0-9-]/g, '-') + '-text';
+    // Create message with instructions
+    const message = [
+      `**${member.displayName}'s War Chamber is Open!**`,
+      '',
+      '**For the Host:**',
+      '• Your invite link has been sent to your DMs',
+      '• Share that link with friends outside the guild',
+      '• They\'ll get Stray Spore role automatically',
+      '• They\'ll be moved to your War Chamber',
+      '',
+      '**For Guild Members:**',
+      `• Use \`/vc goto host:${member.displayName}\` to join this chamber`,
+      '',
+      '**Stray Spore Invite:**',
+      `${invite.url}`,
+      '',
+      '_This invite expires in 24 hours and gives unlimited uses._',
+      '',
+      '**New Stray Spores:** Use `/addalt` to set your WoW character name'
+    ].join('\n');
+
+    // Send to voice channel chat
+    await voiceChannel.send(message);
     
-    // Create text channel
-    const textChannel = await guild.channels.create({
-      name: textChannelName,
-      type: ChannelType.GuildText,
-      parent: voiceChannel.parentId,
-      permissionOverwrites: [
-        {
-          id: guild.roles.everyone.id,
-          deny: [PermissionFlagsBits.ViewChannel],
-        },
-        {
-          id: member.id, // Chamber owner
-          allow: [
-            PermissionFlagsBits.ViewChannel,
-            PermissionFlagsBits.SendMessages,
-            PermissionFlagsBits.ReadMessageHistory,
-            PermissionFlagsBits.ManageMessages,
-          ],
-        },
-        {
-          id: config.STRAY_SPORE_ROLE_ID, // Stray spores can see
-          allow: [
-            PermissionFlagsBits.ViewChannel,
-            PermissionFlagsBits.SendMessages,
-            PermissionFlagsBits.ReadMessageHistory,
-          ],
-        },
-        {
-          id: guild.members.me.id, // Bot permissions
-          allow: [
-            PermissionFlagsBits.ViewChannel,
-            PermissionFlagsBits.SendMessages,
-            PermissionFlagsBits.ManageMessages,
-          ],
-        },
-      ],
-      reason: `Text channel for ${member.user.tag}'s War Chamber`,
-    });
-
-    // Create access button for existing members
-    const accessButton = new ButtonBuilder()
-      .setCustomId(`access_${voiceChannel.id}`)
-      .setLabel('Get Access (Guild Members)')
-      .setStyle(ButtonStyle.Primary);
-
-    const nameButton = new ButtonBuilder()
-      .setCustomId(`setname`)
-      .setLabel('Set WoW Character Name')
-      .setStyle(ButtonStyle.Success);
-
-    const buttonRow = new ActionRowBuilder().addComponents(accessButton, nameButton);
-
-    // Post the invite with instructions
-    const embed = new EmbedBuilder()
-      .setTitle('War Chamber Invite Instructions')
-      .setDescription([
-        `**${member.displayName}** has opened their War Chamber!`,
-        '',
-        '**For the Host:**',
-        '• Your invite link has been sent to your DMs',
-        '• Share that link with friends outside the guild',
-        '• They\'ll get Stray Spore role and join this chamber',
-        '',
-        '**For Guild Members:**',
-        `• Use \`/vc goto host:${member.displayName}\` to join this chamber`,
-        '• Or click the "Get Access" button below',
-        '',
-        '**Stray Spore Invite:**',
-        `\`\`\`${invite.url}\`\`\``,
-        '',
-        '_This invite expires in 24 hours and gives unlimited uses._',
-        '',
-        '**New Stray Spores:** Click "Set WoW Character Name" to set your nickname'
-      ].join('\n'))
-      .setColor(0x8B4513)
-      .setTimestamp();
-
-    const message = await textChannel.send({ 
-      embeds: [embed],
-      components: [buttonRow]
-    });
-    
-    try {
-      await message.pin();
-    } catch (error) {
-      console.log('Could not pin invite message:', error.message);
-    }
-
-    // Store reference to text channel for cleanup
-    tempInvites.get(voiceChannel.id).textChannelId = textChannel.id;
-    
-    return textChannel;
-    
+    console.log(`Posted invite info to voice channel chat for ${member.user.tag}`);
+    return true;
   } catch (error) {
-    console.error('Failed to post invite message:', error);
-    return null;
+    console.error('Failed to post invite message to voice chat:', error);
+    return false;
   }
 }
 
@@ -365,6 +271,9 @@ export async function createTempVCFor(member) {
   const name = (config.TEMP_VC_NAME_FMT || 'War Chamber – {user}')
     .replace('{user}', member.displayName);
 
+  // Check if user is in the OWNER_IDS list
+  const isHighProphet = isOwner(member.id);
+  
   const overwrites = [
     {
       id: guild.roles.everyone.id,
@@ -386,8 +295,9 @@ export async function createTempVCFor(member) {
         PermissionFlagsBits.DeafenMembers,
         PermissionFlagsBits.MoveMembers,
         PermissionFlagsBits.ManageChannels,
-        PermissionFlagsBits.CreateInstantInvite,
-        PermissionFlagsBits.PrioritySpeaker,
+        PermissionFlagsBits.SendMessages, // For voice chat
+        // Only High Prophets (owners defined in OWNER_IDS) can create invites
+        ...(isHighProphet ? [PermissionFlagsBits.CreateInstantInvite] : [])
       ],
     },
     {
@@ -397,17 +307,19 @@ export async function createTempVCFor(member) {
         PermissionFlagsBits.Connect,
         PermissionFlagsBits.Speak,
         PermissionFlagsBits.UseVAD,
+        PermissionFlagsBits.SendMessages, // For voice chat
       ],
       deny: [PermissionFlagsBits.CreateInstantInvite],
     },
     {
-      id: guild.members.me.id,
+      id: guild.members.me.id, // Bot permissions
       allow: [
         PermissionFlagsBits.ViewChannel,
         PermissionFlagsBits.Connect,
         PermissionFlagsBits.MoveMembers,
         PermissionFlagsBits.ManageChannels,
-        PermissionFlagsBits.CreateInstantInvite,
+        PermissionFlagsBits.CreateInstantInvite, // Bot needs this to create invites
+        PermissionFlagsBits.SendMessages, // For voice chat
       ],
     },
   ];
@@ -433,13 +345,13 @@ export async function createTempVCFor(member) {
     }
   }
 
-  // AUTO-CREATE INVITE
+  // AUTO-CREATE INVITE - Only the bot creates invites
   const invite = await createAutoInvite(ch, member);
   if (invite) {
     // Send DM to host with their invite
     await sendInviteDM(member, invite, ch);
-    // Post instructions in text channel
-    await postInviteMessage(ch, invite, member);
+    // Post instructions in voice channel chat
+    await postInviteToVoiceChat(ch, invite, member);
   }
 
   // Move member to new chamber
@@ -496,14 +408,11 @@ export async function handleTempVCInviteJoin(member, inviteCode) {
       }
     }
     
-    // Send welcome message to the text channel
-    if (inviteData.textChannelId) {
-      const textChannel = member.guild.channels.cache.get(inviteData.textChannelId);
-      if (textChannel) {
-        textChannel.send(
-          `**${member.displayName}** has joined **${inviteData.ownerDisplayName}**'s War Chamber as a Stray Spore! Welcome!`
-        ).catch(() => {});
-      }
+    // Send welcome message to the voice channel
+    if (voiceChannel) {
+      voiceChannel.send(
+        `**${member.displayName}** has joined **${inviteData.ownerDisplayName}**'s War Chamber as a Stray Spore! Welcome!`
+      ).catch(() => {});
     }
 
     // Send character name modal to new Stray Spore

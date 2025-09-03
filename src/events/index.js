@@ -1,11 +1,9 @@
-// ============= src/events/index.js =============
+// events/index.js - Event handler registration
 import * as readyEvent from './ready.js';
-import * as voiceStateUpdateEvent from './voiceStateUpdate.js';
-import * as interactionCreateEvent from './interactionCreate.js';
+import * as interactionCreateEvent from '../interaction-handler.js';
 
 const events = [
   readyEvent,
-  voiceStateUpdateEvent,
   interactionCreateEvent,       
 ];
 
@@ -17,6 +15,4 @@ export function loadEvents(client) {
       client.on(event.name, (...args) => event.execute(...args));
     }
   }
-
-  console.log(`Loaded ${events.length} events`);
 }

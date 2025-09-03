@@ -1,51 +1,32 @@
-// ============= src/services/oath-completion-service.js =============
+// oath-service.js - Handles oath-related functionality
 import { EmbedBuilder } from 'discord.js';
-import { CHANNELS } from '../channels.js';
+import { CHANNELS } from './channels.js';
 
-function getTierInfo(tier, flavor) {
+// Get role information based on flair
+function getRoleInfo(flavor) {
   const info = {
-    'mem:lgbt': {
+    'lgbt': {
       title: 'Mycelioglitter',
       description: 'You are now a full member of the Holy Gehy Empire, blessed with the rainbow spores of pride.',
       color: 0x9932CC, // Purple
     },
-    'mem:ally': {
+    'ally': {
       title: 'Glitter Ally', 
       description: 'You stand as a cherished ally within the Holy Gehy Empire, bearing the sacred trust of fellowship.',
       color: 0x4169E1, // Royal Blue
     },
-    'off:lgbt': {
-      title: 'Glitter Crusader',
-      description: 'You have risen to lead within the Holy Gehy Empire, wielding both rainbow spores and sacred authority.',
-      color: 0xFF6347, // Tomato Red
-    },
-    'off:ally': {
-      title: 'Banner Bearer',
-      description: 'You carry the standards of the Empire, leading allies and members alike with wisdom and strength.',
-      color: 0x32CD32, // Lime Green
-    },
-    'vet:lgbt': {
-      title: 'Rainbow Apostle',
-      description: 'Ancient wisdom flows through you. You are a pillar of the Empire, revered for your long service.',
-      color: 0xFFD700, // Gold
-    },
-    'vet:ally': {
-      title: 'Rainbow Ally Lieutenant',
-      description: 'Your dedication spans ages. You stand among the Empire\'s most trusted guardians and guides.',
-      color: 0xFF8C00, // Dark Orange
-    },
   };
 
-  return info[`${tier}:${flavor}`] || {
+  return info[flavor] || {
     title: 'Imperial Citizen',
     description: 'Welcome to the Holy Gehy Empire.',
     color: 0x808080,
   };
 }
 
-function createWelcomeDM(member, tier, flavor) {
-  const { title, description, color } = getTierInfo(tier, flavor);
-  const sporehallMention = CHANNELS.SPOREHALL ? `<#${CHANNELS.SPOREHALL}>` : 'Sporehall';
+// Create welcome DM with instructions
+export function createWelcomeDM(member, flavor) {
+  const { title, description, color } = getRoleInfo(flavor);
   
   const embed = new EmbedBuilder()
     .setTitle(`Welcome, ${title} ${member.displayName}!`)
@@ -81,7 +62,7 @@ function createWelcomeDM(member, tier, flavor) {
       {
         name: '🧭 Moving Your Guests',
         value: [
-          `**Option 1:** Have your guest use \`/vc\` in ${sporehallMention}`,
+          '**Option 1:** Have your guest use `/vc` in the appropriate channel',
           '• They select your name from the autocomplete',
           '• They\'ll be moved directly to your War Chamber',
           '',
@@ -111,11 +92,12 @@ function createWelcomeDM(member, tier, flavor) {
   return embed;
 }
 
-export async function sendOathCompletionDM(member, tier, flavor) {
+// Send welcome DM to user
+export async function sendOathCompletionDM(member, flavor) {
   try {
-    const embed = createWelcomeDM(member, tier, flavor);
+    const embed = createWelcomeDM(member, flavor);
     await member.send({ embeds: [embed] });
-    console.log(`📬 Sent oath completion DM to ${member.user.tag} (${tier}:${flavor})`);
+    console.log(`📬 Sent oath completion DM to ${member.user.tag} (${flavor})`);
     return true;
   } catch (error) {
     console.error(`Failed to send oath completion DM to ${member.user.tag}:`, error);
@@ -123,18 +105,35 @@ export async function sendOathCompletionDM(member, tier, flavor) {
   }
 }
 
-// Function to get a tier-appropriate greeting for public channels
-export function getPublicWelcomeText(member, tier, flavor) {
-  const { title } = getTierInfo(tier, flavor);
+// Get public welcome text for announcements
+export function getPublicWelcomeText(member, flavor) {
+  const { title } = getRoleInfo(flavor);
   
   const welcomes = {
-    'mem:lgbt': `🌈 **Welcome to the Holy Gehy Empire, Mycelioglitter ${member}!** The rainbow spores sing your name.`,
-    'mem:ally': `🤝 **Welcome to the Holy Gehy Empire, Glitter Ally ${member}!** Your fellowship strengthens our bonds.`,
-    'off:lgbt': `⚔️ **Welcome to the Holy Gehy Empire, Glitter Crusader ${member}!** Lead with pride and wisdom.`,
-    'off:ally': `🏳️ **Welcome to the Holy Gehy Empire, Banner Bearer ${member}!** Carry our standards with honor.`,
-    'vet:lgbt': `👑 **Welcome to the Holy Gehy Empire, Rainbow Apostle ${member}!** Your wisdom guides us all.`,
-    'vet:ally': `🛡️ **Welcome to the Holy Gehy Empire, Rainbow Ally Lieutenant ${member}!** Your service is legendary.`,
+    'lgbt': `🌈 **Welcome to the Holy Gehy Empire, Mycelioglitter ${member}!** The rainbow spores sing your name.`,
+    'ally': `🤝 **Welcome to the Holy Gehy Empire, Glitter Ally ${member}!** Your fellowship strengthens our bonds.`,
   };
 
-  return welcomes[`${tier}:${flavor}`] || `**Welcome to the Holy Gehy Empire, ${title} ${member}!**`;
+  return welcomes[flavor] || `**Welcome to the Holy Gehy Empire, ${title} ${member}!**`;
+}
+
+// Create the RP scene text for oath ceremony
+export function createOathSceneText(userMention, flavor, characterName, characterClass) {
+  const lines = [];
+  const nameWithClass = characterClass ? `${characterName}, ${characterClass}` : characterName;
+  
+  lines.push(`📜 **Narrator:** Attendants guide ${userMention} through a hidden door of living bark. Candles stir; the spore-song hums.`);
+  lines.push(`*"${nameWithClass} approaches the sacred chamber..."*`);
+
+  if (flavor === 'lgbt') {
+    lines.push('A chamber draped in rainbow moss welcomes you. Mushroom-folk pour shimmering spore-tea as fragrant smoke curls through the air. Saint Fungus and Geebus drift by with warm smiles. ☕');
+    lines.push(`Tap **Accept Oath** to seal your mantle as **Mycelioglitter ${characterName}**.`);
+  } else if (flavor === 'ally') {
+    lines.push('Lantern-light and cushions await. Companions beckon you to sit, share tea, and breathe easy among friends. Saint Fungus raises a mug; Geebus offers a pipe with a wink. ☕');
+    lines.push(`Tap **Accept Oath** to join the ranks of the **Glitter Allies** as **${characterName}**.`);
+  } else {
+    lines.push(`Your path as **${characterName}** will be recognized upon oath. Tap **Accept Oath** to proceed.`);
+  }
+
+  return lines.join('\n');
 }
