@@ -1,4 +1,5 @@
-// ============= index.js (main entry point) =============
+// index.js (main entry point)
+import { Events } from 'discord.js';
 
 // Global error handlers - log but don't exit
 process.on('unhandledRejection', (err) => {
@@ -16,7 +17,7 @@ import { CHANNELS } from './src/channels.js';
 import { loadEvents } from './src/events/index.js';
 import { config } from './src/config.js';
 import { tempInvites } from './src/services/temp-vc-service.js';
-import { commands, loadCommands } from './src/commands/index.js';
+import { loadCommands } from './src/commands/index.js';
 
 // Validate token FIRST
 const token = process.env.DISCORD_TOKEN || config.DISCORD_TOKEN;
@@ -45,7 +46,8 @@ const client = new Client({
   ],
 });
 
-client.once('ready', () => {
+// Fixed: Proper event handler syntax
+client.once(Events.ClientReady, () => {
   console.log(`✅ Ready as ${client.user.tag}`);
 });
 
@@ -63,9 +65,6 @@ client.on('shardDisconnect', (event, id) => {
 
 client.on('warn', (m) => console.warn('⚠️ DJS warn:', m));
 client.on('error', (e) => console.error('💥 DJS error:', e));
-
-// Expose command map for /glowwarden help
-client.commands = commands;
 
 // Function to clean up expired temp VC invites
 function cleanupExpiredInvites() {
@@ -119,8 +118,8 @@ loadCommands(client);
 console.log('Loading events...');
 loadEvents(client);
 
-// Set up cleanup interval when ready
-client.once('ready', () => {
+// Set up cleanup interval when ready (Fixed: removed duplicate event handler)
+client.once(Events.ClientReady, () => {
   console.log(`🎯 Bot ready! Logged in as ${client.user.tag}`);
   
   // Reset reconnection attempts on successful connection

@@ -1,96 +1,85 @@
-// ============= src/config.js =============
+// src/config.js
+// ESM-friendly config loader with env normalization + validation
 import 'dotenv/config';
-import { CHANNELS } from './channels.js';
 
-const toBool = (v, d = false) => {
-  if (v === undefined || v === null || v === '') return d;
-  const s = String(v).toLowerCase();
-  return s === 'true' || s === '1' || s === 'yes' || s === 'on';
+const bool = (v, d = false) => {
+  if (v == null) return d;
+  const s = String(v).trim().toLowerCase();
+  return s === '1' || s === 'true' || s === 'yes' || s === 'y';
 };
-const toInt = (v, d) => {
-  const n = Number.parseInt(v, 10);
-  return Number.isFinite(n) ? n : d;
-};
-const snowflake = v => (v && /^\d{17,20}$/.test(String(v))) ? String(v) : '';
-
-function parseInviteRoleMap(s) {
-  const map = {};
-  if (!s) return map;
-  for (const pair of s.split(',').map(x => x.trim()).filter(Boolean)) {
-    const [code, role] = pair.split(':').map(x => x.trim());
-    if (code && snowflake(role)) map[code] = role;
-  }
-  return map;
-}
+const num = (v, d) => (v == null || v === '' || Number.isNaN(Number(v)) ? d : Number(v));
+const list = (v) => (v ? String(v).split(/[,\s]+/).filter(Boolean) : []);
 
 export const config = {
-  // Core env
-  DISCORD_TOKEN: process.env.DISCORD_TOKEN || '',
-  CLIENT_ID: process.env.CLIENT_ID || '',
-  GUILD_ID: snowflake(process.env.GUILD_ID),
-  BOT_USER_ID: snowflake(process.env.BOT_USER_ID),
+  // Core
+  CLIENT_ID: process.env.CLIENT_ID,
+  BOT_USER_ID: process.env.BOT_USER_ID,
+  DISCORD_TOKEN: process.env.DISCORD_TOKEN,         // <-- make sure this is set
+  GUILD_ID: process.env.GUILD_ID,
+  OWNER_IDS: list(process.env.OWNER_IDS),
 
-  // Owner IDs
-  OWNER_IDS: process.env.OWNER_IDS?.split(',').map(id => id.trim()) || [],
-  OWNER_ID: process.env.OWNER_IDS?.split(',')[0]?.trim() || '',
+  // Channels / Categories
+  LOG_CHANNEL_ID: process.env.LOG_CHANNEL_ID,
+  DECREE_CHANNEL_ID: process.env.DECREE_CHANNEL_ID,
+  RENT_WAR_CHAMBER_VC_ID: process.env.RENT_WAR_CHAMBER_VC_ID,
+  BATTLEFRONT_CATEGORY_ID: process.env.BATTLEFRONT_CATEGORY_ID,
 
-  // Core channels - prefer .env, fallback to channels.js
-  DECREE_CHANNEL_ID: process.env.DECREE_CHANNEL_ID || CHANNELS.CHAMBER_OF_OATHS,
-  LOG_CHANNEL_ID: process.env.LOG_CHANNEL_ID || CHANNELS.HALL_OF_RECORDS,
-  
-  // Temp VC settings - use spec naming with fallbacks
-  RENT_WAR_CHAMBER_VC_ID: process.env.RENT_WAR_CHAMBER_VC_ID || process.env.LOBBY_VC_ID || CHANNELS.RENT_A_WAR_CHAMBER,
-  BATTLEFRONT_CATEGORY_ID: process.env.BATTLEFRONT_CATEGORY_ID || process.env.TEMP_VC_CATEGORY_ID || CHANNELS.BATTLEFRONT,
-  EMPTY_MINUTES: toInt(process.env.EMPTY_MINUTES, 5),
-  
-  // Server settings
-  PORT: toInt(process.env.PORT, 3000),
-  TEMP_VC_DELETE_AFTER: toInt(process.env.TEMP_VC_DELETE_AFTER, 300), // 5 minutes
-  TEMP_VC_USER_LIMIT: toInt(process.env.TEMP_VC_USER_LIMIT, 0) || undefined,
-  TEMP_VC_NAME_FMT: process.env.TEMP_VC_NAME_FMT || 'War Chamber — {user}',
-  SWEEP_INTERVAL_SEC: toInt(process.env.SWEEP_INTERVAL_SEC, 600),
+  // Roles (base/flair/final)
+  ROLE_LGBTQ: process.env.ROLE_LGBTQ,
+  ROLE_ALLY: process.env.ROLE_ALLY,
+  ROLE_BASE_MEMBER: process.env.ROLE_BASE_MEMBER,
+  ROLE_BASE_OFFICER: process.env.ROLE_BASE_OFFICER,
+  ROLE_BASE_VETERAN: process.env.ROLE_BASE_VETERAN,
 
-  // Role IDs - use spec naming
-  ROLE_HOST_ID: snowflake(process.env.TEMP_HOST_ROLE_ID), // Temp host role
-  TEMP_HOST_ROLE_ID: snowflake(process.env.TEMP_HOST_ROLE_ID), // Keep backward compatibility
-  ROLE_STRAY_SPORE_ID: snowflake(process.env.STRAY_SPORE_ROLE_ID),
-  STRAY_SPORE_ROLE_ID: snowflake(process.env.STRAY_SPORE_ROLE_ID), // Keep backward compatibility
-  
-  // Base roles
-  ROLE_BASE_MEMBER: snowflake(process.env.ROLE_BASE_MEMBER),
-  ROLE_BASE_OFFICER: snowflake(process.env.ROLE_BASE_OFFICER),
-  ROLE_BASE_VETERAN: snowflake(process.env.ROLE_BASE_VETERAN),
+  ROLE_FINAL_MYCE: process.env.ROLE_FINAL_MYCE,
+  ROLE_FINAL_GALLIES: process.env.ROLE_FINAL_GALLIES,
+  ROLE_FINAL_GCRUS: process.env.ROLE_FINAL_GCRUS,
+  ROLE_FINAL_BBEAR: process.env.ROLE_FINAL_BBEAR,
+  ROLE_FINAL_RAPO: process.env.ROLE_FINAL_RAPO,
+  ROLE_FINAL_RALLYLT: process.env.ROLE_FINAL_RALLYLT,
 
-  // Final roles
-  ROLE_FINAL_MYCE: snowflake(process.env.ROLE_FINAL_MYCE),
-  ROLE_FINAL_GALLIES: snowflake(process.env.ROLE_FINAL_GALLIES),
-  ROLE_FINAL_GCRUS: snowflake(process.env.ROLE_FINAL_GCRUS),
-  ROLE_FINAL_BBEAR: snowflake(process.env.ROLE_FINAL_BBEAR),
-  ROLE_FINAL_RAPO: snowflake(process.env.ROLE_FINAL_RAPO),
-  ROLE_FINAL_RALLYLT: snowflake(process.env.ROLE_FINAL_RALLYLT),
+  // Temp VC roles (normalize to names your code expects)
+  ROLE_STRAY_SPORE_ID: process.env.STRAY_SPORE_ROLE_ID,
+  ROLE_HOST_ID: process.env.TEMP_HOST_ROLE_ID,      // env name -> normalized property
+  HOST_ALERT_ROLE_ID: process.env.HOST_ALERT_ROLE_ID,
 
-  // Flair roles
-  ROLE_LGBTQ: snowflake(process.env.ROLE_LGBTQ),
-  ROLE_ALLY: snowflake(process.env.ROLE_ALLY),
+  // Temp VC settings
+  EMPTY_MINUTES: num(process.env.EMPTY_MINUTES, 2),
+  DEFAULT_USES: num(process.env.DEFAULT_USES, 0),
+  MAX_USES: num(process.env.MAX_USES, 0),
+  TEMP_VC_NAME_FMT: process.env.TEMP_VC_NAME_FMT || 'War Chamber --- {user}',
+  TEMP_VC_DELETE_AFTER: num(process.env.TEMP_VC_DELETE_AFTER, 300),
+  TEMP_VC_USER_LIMIT: num(process.env.TEMP_VC_USER_LIMIT, 0),
+  SWEEP_INTERVAL_SEC: num(process.env.SWEEP_INTERVAL_SEC, 600),
 
-  // Ceremony settings
-  CEREMONY_REMOVE_BASE_ON_FINAL: toBool(process.env.CEREMONY_REMOVE_BASE_ON_FINAL, true),
+  CEREMONY_REMOVE_BASE_ON_FINAL: bool(process.env.CEREMONY_REMOVE_BASE_ON_FINAL, false),
+  PUBLIC_ACK: bool(process.env.PUBLIC_ACK, false),
 
-  // Invite → role mapping
-  INVITE_ROLE_MAP: parseInviteRoleMap(process.env.INVITE_ROLE_MAP),
-  INVITE_DEFAULT_ROLE_ID: snowflake(process.env.INVITE_DEFAULT_ROLE_ID),
+  NODE_ENV: process.env.NODE_ENV || 'development',
 
-  // Legacy settings
-  MAX_USES: toInt(process.env.MAX_USES, 10),
-  DEFAULT_USES: toInt(process.env.DEFAULT_USES, 4),
+  // Database / Supabase
+  DATABASE_URL: process.env.DATABASE_URL,
+  SUPABASE_URL: process.env.SUPABASE_URL,
+  SUPABASE_SERVICE_KEY: process.env.SUPABASE_SERVICE_KEY,
+  SUPABASE_ANON_KEY: process.env.SUPABASE_ANON_KEY,
 };
 
-// Validation and warnings
-console.log('=== Config Validation ===');
-console.log('GUILD_ID:', config.GUILD_ID || '❌ MISSING');
-console.log('BOT_USER_ID:', config.BOT_USER_ID || '❌ MISSING');
-console.log('RENT_WAR_CHAMBER_VC_ID:', config.RENT_WAR_CHAMBER_VC_ID || '❌ MISSING');
-console.log('BATTLEFRONT_CATEGORY_ID:', config.BATTLEFRONT_CATEGORY_ID || '❌ MISSING');
-console.log('ROLE_HOST_ID:', config.ROLE_HOST_ID || '❌ MISSING');
-console.log('ROLE_STRAY_SPORE_ID:', config.ROLE_STRAY_SPORE_ID || '❌ MISSING');
-console.log('========================');
+// Minimal required envs for boot
+const REQUIRED = [
+  'DISCORD_TOKEN',
+  'CLIENT_ID',
+  'GUILD_ID',
+  'RENT_WAR_CHAMBER_VC_ID',
+  'BATTLEFRONT_CATEGORY_ID',
+  'ROLE_STRAY_SPORE_ID',   // normalized key
+  'ROLE_HOST_ID',          // normalized key
+];
+
+const missing = REQUIRED.filter((k) => !config[k]);
+if (missing.length) {
+  console.error('[config] Missing required env keys:', missing.join(', '));
+  // Fail fast in production; continue in dev if you prefer
+  if (config.NODE_ENV !== 'development') {
+    process.exit(1);
+  }
+}

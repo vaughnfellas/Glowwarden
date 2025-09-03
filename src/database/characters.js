@@ -82,4 +82,24 @@ export const CharacterDB = {
   async close() {
     await pool.end();
   },
+
+  // Add these methods to your CharacterDB in characters.js
+  async setMainCharacter(userId, name) {
+    // First, unset all other mains
+    await query('UPDATE public.characters SET is_main = false WHERE user_id = $1', [userId]);
+    
+    // Set the specified character as main
+    await query(
+      'UPDATE public.characters SET is_main = true WHERE user_id = $1 AND LOWER(name) = LOWER($2)',
+      [userId, name]
+    );
+  },
+
+  // Also add this method for deletealt functionality
+  async deleteCharacter(userId, name) {
+    await query(
+      'DELETE FROM public.characters WHERE user_id = $1 AND LOWER(name) = LOWER($2)',
+      [userId, name]
+    );
+  },
 };

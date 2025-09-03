@@ -11,11 +11,13 @@ import * as ping from './ping.js';
 import * as status from './status.js';
 import * as vcStatus from './vc-status.js';
 import * as vc from './vc.js';
-import * as generateInvite from './generate-invite.js'; // keep only if the file exists
+import * as generateInvite from './generate-invite.js';
 
 // Build a Map<name, module> for quick lookup by interactionCreate
 export const commands = new Map();
-[
+
+// Array of all command modules
+const commandModules = [
   decree,
   addalt,
   glowwarden,
@@ -26,19 +28,64 @@ export const commands = new Map();
   vcStatus,
   vc,
   generateInvite,
-].filter(Boolean).forEach((mod) => {
-  // Expecting each module to export: data (SlashCommandBuilder) and execute()
+];
+
+// Register each command module
+commandModules.forEach((mod) => {
+  // Check if module has valid data and execute function
   if (mod?.data?.name && typeof mod.execute === 'function') {
     commands.set(mod.data.name, mod);
+    console.log(`Registered command: ${mod.data.name}`);
+  } else {
+    console.warn('Invalid command module found:', mod);
   }
 });
+
+// Register additional commands from addalt.js that export multiple commands
+if (addalt.switchData && typeof addalt.executeSwitch === 'function') {
+  const switchCommand = {
+    data: addalt.switchData,
+    execute: addalt.executeSwitch
+  };
+  commands.set('switch', switchCommand);
+  console.log('Registered command: switch');
+}
+
+if (addalt.rosterData && typeof addalt.executeRoster === 'function') {
+  const rosterCommand = {
+    data: addalt.rosterData,
+    execute: addalt.executeRoster
+  };
+  commands.set('roster', rosterCommand);
+  console.log('Registered command: roster');
+}
+
+if (addalt.deleteAltData && typeof addalt.executeDeleteAlt === 'function') {
+  const deleteAltCommand = {
+    data: addalt.deleteAltData,
+    execute: addalt.executeDeleteAlt
+  };
+  commands.set('deletealt', deleteAltCommand);
+  console.log('Registered command: deletealt');
+}
+
+console.log(`Total commands registered: ${commands.size}`);
 
 // Attach to client (so interactionCreate can do client.commands.get(name))
 export function loadCommands(client) {
   client.commands = commands;
+  console.log(`Commands loaded to client: ${commands.size} total`);
 }
 
-// Optional helper if you later want to deploy “all commands” in one shot:
-// export function allCommandJSON() {
-//   return [...commands.values()].map((m) => m.data.toJSON());
-// }
+// Helper to get all command data for deployment
+export function getAllCommandData() {
+  const commandData = [];
+  
+  for (const [name, command] of commands) {
+    if (command.data && typeof command.data.toJSON === 'function') {
+      commandData.push(command.data.toJSON());
+    }
+  }
+  
+  return commandData;
+}

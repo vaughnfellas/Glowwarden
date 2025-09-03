@@ -15,13 +15,9 @@ import { CharacterDB } from '../database/characters.js';
 
 // Class options for WoW
 const CLASS_OPTIONS = [
-  { name: 'Death Knight', value: 'Death Knight', emoji: '💀' },
-  { name: 'Demon Hunter', value: 'Demon Hunter', emoji: '👹' },
   { name: 'Druid', value: 'Druid', emoji: '🐻' },
-  { name: 'Evoker', value: 'Evoker', emoji: '🐉' },
   { name: 'Hunter', value: 'Hunter', emoji: '🏹' },
   { name: 'Mage', value: 'Mage', emoji: '🔮' },
-  { name: 'Monk', value: 'Monk', emoji: '🧘' },
   { name: 'Paladin', value: 'Paladin', emoji: '🛡️' },
   { name: 'Priest', value: 'Priest', emoji: '✨' },
   { name: 'Rogue', value: 'Rogue', emoji: '🗡️' },
@@ -234,4 +230,26 @@ export async function executeDeleteAlt(interaction) {
     components: [row],
     ephemeral: true
   });
+}
+
+// Add this autocomplete function to your addalt.js
+export async function autocomplete(interaction) {
+  const focusedValue = interaction.options.getFocused();
+  const userId = interaction.user.id;
+  
+  try {
+    const characters = await CharacterDB.getCharacters(userId);
+    const filtered = characters
+      .filter(char => char.name.toLowerCase().includes(focusedValue.toLowerCase()))
+      .slice(0, 25) // Discord limit
+      .map(char => ({
+        name: `${char.name}${char.class ? ` (${char.class})` : ''}${char.isMain ? ' [MAIN]' : ''}`,
+        value: char.name
+      }));
+    
+    await interaction.respond(filtered);
+  } catch (error) {
+    console.error('Autocomplete error:', error);
+    await interaction.respond([]);
+  }
 }

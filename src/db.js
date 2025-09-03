@@ -1,47 +1,38 @@
+// src/db.js
 import 'dotenv/config';
 import pg from 'pg';
-const { Pool } = pg;
 
-// Supabase requires proper SSL configuration
+const { Pool } = pg;
 const isProduction = process.env.NODE_ENV === 'production';
 
 export const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
   ssl: isProduction ? { rejectUnauthorized: false } : false,
-  // Add connection limits for better stability
-  max: 20, // Maximum connections in pool
-  idleTimeoutMillis: 30000, // Close idle connections after 30 seconds
-  connectionTimeoutMillis: 2000, // Fail fast if can't connect within 2 seconds
+  // Pool tuning (optional, keep if useful)
+  max: 20,
+  idleTimeoutMillis: 30_000,
+  connectionTimeoutMillis: 2_000,
 });
 
-// Test connection on startup
+// Optional: quick connectivity check (logs at boot)
 pool.connect()
-  .then(client => {
-    console.log('✅ Database connected successfully');
-    return client.query('SELECT NOW()');
-  })
-  .then(result => {
-    console.log('📅 Database time:', result.rows[0].now);
-  })
+  .then(client => client.query('SELECT NOW()').finally(() => client.release()))
+  .then(res => console.log('✅ DB up. Time:', res.rows?.[0]?.now))
   .catch(err => {
-    console.error('❌ Database connection failed:', err.message);
-    console.error('Full error:', err);
-  })
-  .finally(() => {
-    // Don't close the pool here, just the test client
+    console.error('❌ DB connection failed:', err.message);
+    console.error(err);
   });
 
+// Primary query helper
 export const query = (text, params) => pool.query(text, params);
 
-// Graceful shutdown
-process.on('SIGINT', async () => {
-  console.log('🔄 Shutting down database pool...');
-  await pool.end();
-  process.exit(0);
-});
+// Back-compat facade so legacy `import { db }` still works
+export const db = { query, pool };
 
-process.on('SIGTERM', async () => {
-  console.log('🔄 Shutting down database pool...');
-  await pool.end();
-  process.exit(0);
-});
+// Graceful shutdown
+for (const sig of ['SIGINT', 'SIGTERM']) {
+  process.on(sig, async () => {
+    console.log('🔄 Shutting down database pool...');
+    try { await pool.end(); } finally { process.exit(0); }
+  });
+}
