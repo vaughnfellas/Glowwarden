@@ -2,8 +2,8 @@ name: keep-render-warm
 
 on:
   schedule:
-    - cron: "*/10 * * * *"   # every 10 minutes (UTC)
-  workflow_dispatch: {}       # lets you run it manually from the Actions tab
+    - cron: "*/10 * * * *"   # Keep the 10-minute frequency
+  workflow_dispatch: {}      # lets you run it manually from the Actions tab
 
 jobs:
   ping:
@@ -12,6 +12,6 @@ jobs:
       group: keep-render-warm
       cancel-in-progress: false
     steps:
-      - name: Ping Render health endpoint
+      - name: Keep Render warm without affecting Discord
         run: |
-          curl -fsS https://spore-inviter.onrender.com/healthz || true
+          curl -fsS https://spore-inviter.onrender.com/warm || true
