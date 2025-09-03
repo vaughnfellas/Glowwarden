@@ -1,0 +1,52 @@
+# --- VCS / CI ---
+.git/
+.github/
+.gitignore
+
+# --- Node & builds ---
+node_modules/
+dist/
+build/
+coverage/
+.cache/
+.tmp/
+npm-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# --- Editors ---
+.vscode/
+.idea/
+
+# --- Local scripts not needed on Discloud ---
+scripts/
+
+# --- Local-only resources ---
+theOgreFiles/
+
+# --- Tests & throwaways ---
+test/
+__tests__/
+*.test.js
+*.spec.js
+test-*.js
+test-*.cjs
+test-token.js
+
+# --- Local databases (exclude if not needed in prod) ---
+# If your bot DOESN'T need these on the server, keep excluded:
+characters.db
+*.sqlite
+*.sqlite3
+*.db
+# If you DO need one of them, comment that single line out.
+
+# --- Env examples (keep real .env INCLUDED) ---
+.env.example
+.env.development.local
+.env.test.local
+.env.production.local
+
+# --- OS junk ---
+.DS_Store
+Thumbs.db

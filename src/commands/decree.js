@@ -9,7 +9,10 @@ import {
   MessageFlags,
 } from 'discord.js';
 import { checkOwnerPermission } from '../utils/owner.js';
-import { CHANNELS } from './channels.js';
+import { CHANNELS } from '../channels.js';
+import { config } from '../config.js';
+import { db } from '../db.js';
+
 
 export const data = new SlashCommandBuilder()
   .setName('decree')

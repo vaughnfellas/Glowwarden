@@ -8,55 +8,44 @@ export const once = false;
 
 export async function execute(oldState, newState) {
   // Ignore bot voice state changes
-  if (newState.member.user.bot) return;
+  if (newState.member?.user?.bot) return;
 
-  const lobbyId = config.RENT_WAR_CHAMBER_VC_ID; // Use spec-compliant variable name
-  
-  // Check if user joined the "Rent A War Chamber" lobby VC
+  const lobbyId = config.RENT_WAR_CHAMBER_VC_ID;
+
+  // Joined the lobby
   if (newState.channelId === lobbyId && oldState.channelId !== lobbyId) {
     console.log(`${newState.member.user.tag} joined "Rent A War Chamber" lobby`);
-    
-    // Check if user is NOT a Stray Spore (i.e., is a Full Member)
+
+    // FM = NOT Stray Spore
     if (!newState.member.roles.cache.has(config.ROLE_STRAY_SPORE_ID)) {
-      console.log(`${newState.member.user.tag} is a Full Member - processing War Chamber creation`);
-      
-      // Check if user already has an active chamber
+      // existing chamber?
       let existingChannelId = null;
       for (const [channelId, ownerId] of tempOwners.entries()) {
-        if (ownerId === newState.member.id) {
-          existingChannelId = channelId;
-          break;
-        }
+        if (ownerId === newState.member.id) { existingChannelId = channelId; break; }
       }
-      
+
       if (existingChannelId) {
-        // User already has a chamber, move them there and refresh invite
-        const existingChannel = newState.guild.channels.cache.get(existingChannelId);
-        if (existingChannel) {
+        const existing = newState.guild.channels.cache.get(existingChannelId);
+        if (existing) {
           try {
-            await newState.member.voice.setChannel(existingChannel);
-            console.log(`Moved ${newState.member.user.tag} to their existing War Chamber: ${existingChannel.name}`);
-            
-            // TODO: Refresh the 24h invite (DM + post again as per spec)
-            // This should be implemented in temp-vc-service.js
-            
-          } catch (error) {
-            console.error('Failed to move member to existing chamber:', error);
+            await newState.member.voice.setChannel(existing);
+            console.log(`Moved ${newState.member.user.tag} to existing War Chamber: ${existing.name}`);
+            // (Optional) refresh 24h invite here via your service
+          } catch (e) {
+            console.error('Failed to move member to existing chamber:', e);
           }
           return;
         } else {
-          // Channel no longer exists, remove from tracking
-          console.log(`Removing stale chamber tracking for ${existingChannelId}`);
           tempOwners.delete(existingChannelId);
         }
       }
-      
-      // Create a new War Chamber for the user
+
+      // create new chamber
       try {
         console.log(`Creating new War Chamber for ${newState.member.user.tag}`);
         await createTempVCFor(newState.member);
-      } catch (error) {
-        console.error('Failed to create War Chamber:', error);
+      } catch (e) {
+        console.error('Failed to create War Chamber:', e);
       }
     } else {
       console.log(`${newState.member.user.tag} is a Stray Spore - ignoring lobby join`);
