@@ -271,8 +271,6 @@ export async function execute(interaction) {
 // Handle button clicks
 export async function handleButtonClick(interaction) {
   try {
-export async function handleButtonClick(interaction) {
-  try {
     // Ensure customId has the expected format before destructuring
     const parts = interaction.customId.split(':');
     if (parts.length < 2) {
@@ -289,12 +287,6 @@ export async function handleButtonClick(interaction) {
         ephemeral: true
       });
     }
-
-    // ...rest of the handler logic...
-  } catch (error) {
-    // existing error handling
-  }
-}
 
     switch (action) {
       case 'alt_add':
