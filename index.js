@@ -20,18 +20,30 @@ import { tempInvites } from './src/services/temp-vc-service.js';
 import { loadCommands } from './src/commands/index.js';
 import { supabase } from './src/db.js';
 
-function setupShutdown() {
+function setupShutdown(client) {
   const shutdown = async (signal) => {
-    console.log('🔄 Shutting down Supabase connections..');
+    console.log(`🔄 Shutting down (signal=${signal})...`);
     try {
-      await supabase.removeAllSubscriptions?.();
+      if (typeof supabase.removeAllSubscriptions === 'function') {
+        await supabase.removeAllSubscriptions();
+      } else if (typeof supabase.removeAllChannels === 'function') {
+        await supabase.removeAllChannels();
+      } else {
+        for (const ch of supabase.getChannels()) {
+          await ch.unsubscribe?.();
+        }
+      }
+      if (client?.destroy) {
+        await client.destroy();
+      }
     } catch (e) {
       console.error('Supabase shutdown warning:', e?.message ?? e);
     } finally {
       process.exit(0);
     }
   };
-  process.on('SIGINT', () => shutdown('SIGINT'));
+
+  process.on('SIGINT',  () => shutdown('SIGINT'));
   process.on('SIGTERM', () => shutdown('SIGTERM'));
 }
 setupShutdown();
