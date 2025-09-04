@@ -1,12 +1,6 @@
 // src/database/characters.js
 // Supabase-based character management (consistent with invites.js)
-import { createClient } from '@supabase/supabase-js';
-import { config } from '../config.js';
-
-const supabaseUrl = process.env.SUPABASE_URL || config.SUPABASE_URL;
-const supabaseKey = process.env.SUPABASE_SERVICE_KEY || config.SUPABASE_SERVICE_KEY;
-
-const supabase = createClient(supabaseUrl, supabaseKey);
+import { supabase } from '../db.js';
 
 export const CharacterDB = {
   async addCharacter(userId, name, charClass, realm, isMain) {
