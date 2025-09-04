@@ -31,12 +31,8 @@ export function getSupabase() {
   return supabaseInstance;
 }
 
-// Export singleton getter
-export const supabase = {
-  get client() {
-    return getSupabase();
-  },
-};
+// Create and export the singleton Supabase client
+export const supabase = getSupabase();
 
 /**
  * Test database connection
@@ -44,7 +40,7 @@ export const supabase = {
  */
 export async function testConnection() {
   try {
-    const { error } = await getSupabase()
+    const { error } = await supabase
       .from('temp_vcs')
       .select('count')
       .limit(1);
@@ -65,7 +61,7 @@ export const tempVCDB = {
    */
   async create(channelId, ownerId, guildId) {
     try {
-      const { error } = await getSupabase()
+      const { error } = await supabase
         .from('temp_vcs')
         .insert({
           channel_id: channelId,
@@ -91,7 +87,7 @@ export const tempVCDB = {
    */
   async updateLastActive(channelId) {
     try {
-      const { error } = await getSupabase()
+      const { error } = await supabase
         .from('temp_vcs')
         .update({ last_active: new Date().toISOString() })
         .eq('channel_id', channelId);
