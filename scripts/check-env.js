@@ -169,8 +169,8 @@ try {
 }
 
 if (errors.length) {
-  console.error('\n❌ ENV VALIDATION FAILED:\n- ' + errors.join('\n- ') + '\n');
+  console.error('\n[ENV-CHECK] VALIDATION FAILED:\n- ' + errors.join('\n- ') + '\n');
   process.exit(1);
 } else {
-  console.log('✅ env ok');
+  console.log('[ENV-CHECK] Validation passed');
 }

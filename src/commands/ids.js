@@ -44,7 +44,7 @@ export const data = new SlashCommandBuilder()
           { name: 'json', value: 'json' },
         )
       )
-      .addBooleanOption(o => o.setName('ephemeral').setDescription('Only you can see (default true)'))
+      .addBooleanOption(o => o.setName('public').setDescription('Show to everyone (default false)'))
   )
   .addSubcommand(sc =>
     sc.setName('channels')
@@ -71,7 +71,7 @@ export const data = new SlashCommandBuilder()
           { name: 'json', value: 'json' },
         )
       )
-      .addBooleanOption(o => o.setName('ephemeral').setDescription('Only you can see (default true)'))
+      .addBooleanOption(o => o.setName('public').setDescription('Show to everyone (default false)'))
   )
   .addSubcommand(sc =>
     sc.setName('categories')
@@ -85,7 +85,7 @@ export const data = new SlashCommandBuilder()
           { name: 'json', value: 'json' },
         )
       )
-      .addBooleanOption(o => o.setName('ephemeral').setDescription('Only you can see (default true)'))
+      .addBooleanOption(o => o.setName('public').setDescription('Show to everyone (default false)'))
   );
 
 export async function execute(interaction) {
@@ -94,92 +94,105 @@ export async function execute(interaction) {
 
   const sub = interaction.options.getSubcommand();
   const format = interaction.options.getString('format') || 'text';
-  const ephemeral = interaction.options.getBoolean('ephemeral') ?? true;
+  const ephemeral = !interaction.options.getBoolean('public');
   const g = interaction.guild;
 
-  if (sub === 'roles') {
-    const roles = [...g.roles.cache.values()]
-      .sort((a, b) => b.position - a.position)
-      .map(r => ({ name: r.name, id: r.id }));
+  try {
+    if (sub === 'roles') {
+      const roles = [...g.roles.cache.values()]
+        .sort((a, b) => b.position - a.position)
+        .map(r => ({ name: r.name, id: r.id }));
 
-    let content;
-    if (format === 'csv') {
-      content = 'name,id\n' + roles.map(r => `"${r.name.replace(/"/g, '""')}",${r.id}`).join('\n');
-      return interaction.reply({ files: [makeFile('roles.csv', content)], flags: ephemeral ? MessageFlags.Ephemeral : undefined });
+      let content;
+      if (format === 'csv') {
+        content = 'name,id\n' + roles.map(r => `"${r.name.replace(/"/g, '""')}",${r.id}`).join('\n');
+        return interaction.reply({ files: [makeFile('roles.csv', content)], flags: ephemeral ? MessageFlags.Ephemeral : undefined });
+      }
+      if (format === 'json') {
+        content = JSON.stringify(roles, null, 2);
+        return interaction.reply({ files: [makeFile('roles.json', content)], flags: ephemeral ? MessageFlags.Ephemeral : undefined });
+      }
+      // text
+      const rows = [['ROLE', 'ID'], ...roles.map(r => [r.name, r.id])];
+      return maybeReplyBig(interaction, toTable(rows), 'roles.txt', ephemeral);
     }
-    if (format === 'json') {
-      content = JSON.stringify(roles, null, 2);
-      return interaction.reply({ files: [makeFile('roles.json', content)], flags: ephemeral ? MessageFlags.Ephemeral : undefined });
+
+    if (sub === 'channels') {
+      const type = interaction.options.getString('type') || 'all';
+      const want = new Set([
+        'all',
+        'text', 'voice', 'category', 'stage', 'forum', 'announcement',
+      ]);
+
+      if (!want.has(type)) {
+        return interaction.reply({ 
+          content: 'Unknown type.', 
+          flags: MessageFlags.Ephemeral 
+        });
+      }
+
+      const typeMap = {
+        text: ChannelType.GuildText,
+        voice: ChannelType.GuildVoice,
+        category: ChannelType.GuildCategory,
+        stage: ChannelType.GuildStageVoice,
+        forum: ChannelType.GuildForum,
+        announcement: ChannelType.GuildAnnouncement,
+      };
+
+      let chans = [...g.channels.cache.values()];
+      if (type !== 'all') {
+        chans = chans.filter(c => c.type === typeMap[type]);
+      }
+      // Sort by type then position
+      chans.sort((a, b) => (a.type - b.type) || (a.rawPosition - b.rawPosition));
+
+      const data = chans.map(c => ({
+        name: c.name,
+        id: c.id,
+        type: Object.keys(typeMap).find(k => typeMap[k] === c.type) || 'other',
+        parent: c.parentId || '',
+      }));
+
+      let content;
+      if (format === 'csv') {
+        content = 'name,id,type,parent\n' + data.map(d =>
+          `"${d.name.replace(/"/g, '""')}",${d.id},${d.type},${d.parent}`
+        ).join('\n');
+        return interaction.reply({ files: [makeFile('channels.csv', content)], flags: ephemeral ? MessageFlags.Ephemeral : undefined });
+      }
+      if (format === 'json') {
+        content = JSON.stringify(data, null, 2);
+        return interaction.reply({ files: [makeFile('channels.json', content)], flags: ephemeral ? MessageFlags.Ephemeral : undefined });
+      }
+      const rows = [['CHANNEL', 'ID', 'TYPE', 'PARENT'],
+        ...data.map(d => [d.name, d.id, d.type, d.parent])];
+      return maybeReplyBig(interaction, toTable(rows), 'channels.txt', ephemeral);
     }
-    // text
-    const rows = [['ROLE', 'ID'], ...roles.map(r => [r.name, r.id])];
-    return maybeReplyBig(interaction, toTable(rows), 'roles.txt', ephemeral);
-  }
 
-  if (sub === 'channels') {
-    const type = interaction.options.getString('type') || 'all';
-    const want = new Set([
-      'all',
-      'text', 'voice', 'category', 'stage', 'forum', 'announcement',
-    ]);
+    if (sub === 'categories') {
+      const cats = [...g.channels.cache.values()]
+        .filter(c => c.type === ChannelType.GuildCategory)
+        .sort((a, b) => a.rawPosition - b.rawPosition)
+        .map(c => ({ name: c.name, id: c.id }));
 
-    if (!want.has(type)) return interaction.reply({ content: 'Unknown type.', flags: MessageFlags.Ephemeral });
-
-    const typeMap = {
-      text: ChannelType.GuildText,
-      voice: ChannelType.GuildVoice,
-      category: ChannelType.GuildCategory,
-      stage: ChannelType.GuildStageVoice,
-      forum: ChannelType.GuildForum,
-      announcement: ChannelType.GuildAnnouncement,
-    };
-
-    let chans = [...g.channels.cache.values()];
-    if (type !== 'all') {
-      chans = chans.filter(c => c.type === typeMap[type]);
+      let content;
+      if (format === 'csv') {
+        content = 'name,id\n' + cats.map(c => `"${c.name.replace(/"/g, '""')}",${c.id}`).join('\n');
+        return interaction.reply({ files: [makeFile('categories.csv', content)], flags: ephemeral ? MessageFlags.Ephemeral : undefined });
+      }
+      if (format === 'json') {
+        content = JSON.stringify(cats, null, 2);
+        return interaction.reply({ files: [makeFile('categories.json', content)], flags: ephemeral ? MessageFlags.Ephemeral : undefined });
+      }
+      const rows = [['CATEGORY', 'ID'], ...cats.map(c => [c.name, c.id])];
+      return maybeReplyBig(interaction, toTable(rows), 'categories.txt', ephemeral);
     }
-    // Sort by type then position
-    chans.sort((a, b) => (a.type - b.type) || (a.rawPosition - b.rawPosition));
-
-    const data = chans.map(c => ({
-      name: c.name,
-      id: c.id,
-      type: Object.keys(typeMap).find(k => typeMap[k] === c.type) || 'other',
-      parent: c.parentId || '',
-    }));
-
-    let content;
-    if (format === 'csv') {
-      content = 'name,id\n' + data.map(d =>
-        `"${d.name.replace(/"/g, '""')}",${d.id},${d.type},${d.parent}`
-      ).join('\n');
-      return interaction.reply({ files: [makeFile('channels.csv', content)], flags: ephemeral ? MessageFlags.Ephemeral : undefined });
-    }
-    if (format === 'json') {
-      content = JSON.stringify(data, null, 2);
-      return interaction.reply({ files: [makeFile('channels.json', content)], flags: ephemeral ? MessageFlags.Ephemeral : undefined });
-    }
-    const rows = [['CHANNEL', 'ID', 'TYPE', 'PARENT'],
-      ...data.map(d => [d.name, d.id, d.type, d.parent])];
-    return maybeReplyBig(interaction, toTable(rows), 'channels.txt', ephemeral);
-  }
-
-  if (sub === 'categories') {
-    const cats = [...g.channels.cache.values()]
-      .filter(c => c.type === ChannelType.GuildCategory)
-      .sort((a, b) => a.rawPosition - b.rawPosition)
-      .map(c => ({ name: c.name, id: c.id }));
-
-    let content;
-    if (format === 'csv') {
-      content = 'name,id\n' + cats.map(c => `"${c.name.replace(/"/g, '""')}",${c.id}`).join('\n');
-      return interaction.reply({ files: [makeFile('categories.csv', content)], flags: ephemeral ? MessageFlags.Ephemeral : undefined });
-    }
-    if (format === 'json') {
-      content = JSON.stringify(cats, null, 2);
-      return interaction.reply({ files: [makeFile('categories.json', content)], flags: ephemeral ? MessageFlags.Ephemeral : undefined });
-    }
-    const rows = [['CATEGORY', 'ID'], ...cats.map(c => [c.name, c.id])];
-    return maybeReplyBig(interaction, toTable(rows), 'categories.txt', ephemeral);
+  } catch (error) {
+    console.error(`[Guild:${interaction.guildId}][User:${interaction.user.id}] IDs command error:`, error);
+    return interaction.reply({
+      content: '❌ Failed to retrieve server information.',
+      flags: MessageFlags.Ephemeral
+    });
   }
 }

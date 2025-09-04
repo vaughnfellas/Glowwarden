@@ -28,9 +28,9 @@ alter table public.characters enable row level security;
 
 try {
   await pool.query(sql);
-  console.log('✅ Migration complete');
+  console.log('[MIGRATE] Database migration completed successfully');
 } catch (e) {
-  console.error('❌ Migration failed:', e);
+  console.error('[MIGRATE] Migration failed:', e);
 } finally {
   await pool.end();
 }

@@ -26,7 +26,7 @@ export async function execute(interaction) {
                 `Database: ❌ Connection failed\n` +
                 `Error: ${error.message}\n` +
                 `Latency: ${interaction.client.ws.ping}ms`,
-        ephemeral: true
+        flags: MessageFlags.Ephemeral
       });
     }
     
@@ -71,14 +71,14 @@ export async function execute(interaction) {
     
     await interaction.reply({ 
       embeds: [statusEmbed],
-      ephemeral: true 
+      flags: MessageFlags.Ephemeral 
     });
     
   } catch (error) {
     console.error('Status command failed:', error);
     await interaction.reply({
       content: `❌ **Status Check Failed**\n\nError: ${error.message}`,
-      ephemeral: true
+      flags: MessageFlags.Ephemeral
     });
   }
 }

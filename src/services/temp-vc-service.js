@@ -1,558 +1,297 @@
 // src/services/temp-vc-service.js
-import { 
-  ChannelType, 
-  PermissionFlagsBits, 
-  EmbedBuilder, 
-  ModalBuilder, 
-  TextInputBuilder, 
-  TextInputStyle, 
-  ActionRowBuilder,
-  ButtonBuilder,
-  ButtonStyle
-} from 'discord.js';
-import { CHANNELS } from '../channels.js';
+import { ChannelType, PermissionFlagsBits } from 'discord.js';
 import { config } from '../config.js';
-import { isOwner } from '../utils/owner.js';
+// import { supabase } from '../db.js'; // Uncomment when database integration is needed
 
-// State tracking
-export const tempOwners = new Map();
-export const deleteTimers = new Map();
-export const tempInvites = new Map(); // channelId -> invite data
-export const pendingNameSetups = new Set(); // userId -> true (users who need to set name)
+// In-memory storage for temp VC owners (consider moving to database)
+export const tempOwners = new Map(); // channelId -> ownerId
 
-let client;
+let client = null;
 
-export function initTempVCService(discordClient) {
-  client = discordClient;
-  // Expose tempInvites on the client for invite tracking
-  client.tempInvites = tempInvites;
+/**
+ * Initialize the temp VC service
+ * @param {Client} discordClient 
+ * @returns {Promise<{ok: boolean, error?: string}>}
+ */
+export async function initTempVCService(discordClient) {
+  try {
+    client = discordClient;
+    console.log('Temp VC service initialized successfully');
+    return { ok: true };
+  } catch (error) {
+    console.error('Failed to initialize temp VC service:', error);
+    return { ok: false, error: error.message };
+  }
 }
 
-export function scheduleDeleteIfEmpty(channelId, guild) {
-  const prev = deleteTimers.get(channelId);
-  if (prev) clearTimeout(prev);
+/**
+ * Create a temporary voice channel for a member
+ * @param {GuildMember} member 
+ * @returns {Promise<{ok: boolean, channel?: GuildChannel, error?: string}>}
+ */
+export async function createTempVCFor(member) {
+  try {
+    if (!client) {
+      return { ok: false, error: 'Temp VC service not initialized' };
+    }
 
-  const t = setTimeout(async () => {
+    const guild = member.guild;
+    const battlefrontCategory = guild.channels.cache.get(config.BATTLEFRONT_CATEGORY_ID);
+    
+    if (!battlefrontCategory) {
+      return { ok: false, error: 'Battlefront category not found' };
+    }
+
+    // Generate channel name
+    const channelName = `War Chamber — ${member.displayName}`;
+    
+    // Create the voice channel
+    const warChamber = await guild.channels.create({
+      name: channelName,
+      type: ChannelType.GuildVoice,
+      parent: battlefrontCategory.id,
+      permissionOverwrites: [
+        {
+          id: guild.roles.everyone,
+          deny: [PermissionFlagsBits.Connect],
+        },
+        {
+          id: member.id,
+          allow: [
+            PermissionFlagsBits.Connect,
+            PermissionFlagsBits.Speak,
+            PermissionFlagsBits.UseVAD,
+            PermissionFlagsBits.ManageChannels,
+            PermissionFlagsBits.ManageRoles,
+          ],
+        },
+        // Allow guild members to connect (not Stray Spores)
+        ...[config.ROLE_BASE_MEMBER, config.ROLE_BASE_OFFICER, config.ROLE_BASE_VETERAN]
+          .filter(roleId => roleId) // Filter out undefined roles
+          .map(roleId => ({
+            id: roleId,
+            allow: [PermissionFlagsBits.Connect, PermissionFlagsBits.Speak, PermissionFlagsBits.UseVAD],
+          })),
+      ],
+    });
+
+    // Track ownership
+    tempOwners.set(warChamber.id, member.id);
+    
+    // Move the member to their new chamber
     try {
-      const ch = guild.channels.cache.get(channelId) || 
-        (await guild.channels.fetch(channelId).catch(() => null));
-      if (!ch || ch.type !== ChannelType.GuildVoice) return;
-
-      if (ch.members.size === 0 && tempOwners.has(channelId)) {
-        const ownerId = tempOwners.get(channelId);
-
-        // Remove temp Host role on delete
-        if (config.TEMP_HOST_ROLE_ID && ownerId) {
-          try {
-            const ownerMember = await guild.members.fetch(ownerId).catch(() => null);
-            if (ownerMember?.roles.cache.has(config.TEMP_HOST_ROLE_ID)) {
-              await ownerMember.roles.remove(config.TEMP_HOST_ROLE_ID);
-              console.log(`Host role removed from ${ownerMember.user.tag} (VC deleted)`);
-            }
-          } catch (e) {
-            console.error('Remove Host role failed:', e);
-          }
-        }
-
-        // Clean up invite tracking
-        tempInvites.delete(channelId);
-
-        await ch.delete('Temp VC empty past grace period');
-        tempOwners.delete(channelId);
-        deleteTimers.delete(channelId);
-        console.log('Deleted empty temp VC:', channelId);
-      }
-    } catch (e) {
-      console.error('Temp VC delete failed:', channelId, e);
+      await member.voice.setChannel(warChamber);
+      console.log(`Created and moved ${member.user.tag} to War Chamber: ${warChamber.name}`);
+    } catch (moveError) {
+      console.error(`Failed to move ${member.user.tag} to new War Chamber:`, moveError);
+      // Don't return error here as channel was created successfully
     }
-  }, config.TEMP_VC_DELETE_AFTER * 1000);
 
-  deleteTimers.set(channelId, t);
-}
-
-export async function sweepTempRooms() {
-  try {
-    if (!config.GUILD_ID || !CHANNELS.BATTLEFRONT || !client) return;
-
-    const guild = await client.guilds.fetch(config.GUILD_ID);
-    const category = await guild.channels.fetch(CHANNELS.BATTLEFRONT).catch(() => null);
-
-    if (!category) return;
-
-    const children = category.children?.cache ?? 
-      guild.channels.cache.filter(c => c.parentId === CHANNELS.BATTLEFRONT);
-
-    for (const ch of children.values()) {
-      if (ch.type !== ChannelType.GuildVoice) continue;
-      if (ch.members.size > 0) continue;
-
-      // Clean up tracking data
-      if (tempOwners.has(ch.id)) {
-        const ownerId = tempOwners.get(ch.id);
-        if (ownerId && config.TEMP_HOST_ROLE_ID) {
-          try {
-            const owner = await guild.members.fetch(ownerId).catch(() => null);
-            if (owner?.roles.cache.has(config.TEMP_HOST_ROLE_ID)) {
-              await owner.roles.remove(config.TEMP_HOST_ROLE_ID);
-              console.log(`Host role removed from ${owner.user.tag} (sweep cleanup)`);
-            }
-          } catch {}
-        }
-
-        tempOwners.delete(ch.id);
-        tempInvites.delete(ch.id);
-        const t = deleteTimers.get(ch.id);
-        if (t) clearTimeout(t);
-        deleteTimers.delete(ch.id);
-      }
-
-      try {
-        await ch.delete('Periodic sweep: empty temp VC in Battlefront');
-        console.log('Sweep deleted:', ch.id, ch.name);
-      } catch (e) {
-        console.error('Sweep delete failed:', ch.id, e);
-      }
+    // Optional: Create 24h invite link
+    try {
+      const invite = await warChamber.createInvite({
+        maxAge: 86400, // 24 hours
+        maxUses: 0, // unlimited uses
+        reason: `24h invite for ${member.displayName}'s War Chamber`
+      });
+      console.log(`Created 24h invite for War Chamber: ${invite.url}`);
+    } catch (inviteError) {
+      console.warn(`Failed to create invite for War Chamber ${warChamber.name}:`, inviteError);
     }
+
+    return { ok: true, channel: warChamber };
     
-    // Optional: Clean up orphaned Stray Spore roles
-    await sweepOrphanedStraySpores(guild);
-    
-  } catch (e) {
-    console.error('Sweep error:', e);
+  } catch (error) {
+    console.error('Error creating temp VC:', error);
+    return { ok: false, error: error.message };
   }
 }
 
-// Optional: Remove Stray Spore role from users who aren't in any temp VC
-async function sweepOrphanedStraySpores(guild) {
+/**
+ * Grant access to a member for a specific temp VC
+ * @param {GuildMember} member 
+ * @param {string} channelId 
+ * @returns {Promise<{success: boolean, message?: string}>}
+ */
+export async function grantAccessToMember(member, channelId) {
   try {
-    // Get all active temp VCs
-    const activeVCs = new Set();
-    for (const [channelId] of tempOwners.entries()) {
-      activeVCs.add(channelId);
+    const channel = member.guild.channels.cache.get(channelId);
+    
+    if (!channel) {
+      return { success: false, message: 'War Chamber not found' };
     }
-    
-    // Get all members with Stray Spore role
-    const straySporeRole = guild.roles.cache.get(config.STRAY_SPORE_ROLE_ID);
-    if (!straySporeRole) return;
-    
-    // Fetch all members with the role
-    const members = await guild.members.fetch();
-    const straySpores = members.filter(m => 
-      m.roles.cache.has(config.STRAY_SPORE_ROLE_ID) && 
-      !m.user.bot
-    );
-    
-    // Check each Stray Spore
-    for (const [memberId, member] of straySpores) {
-      // Skip if they're in a temp VC
-      if (member.voice.channelId && activeVCs.has(member.voice.channelId)) {
-        continue;
-      }
-      
-      // Skip if they're a guild member (has any base role)
-      if (member.roles.cache.has(config.ROLE_BASE_MEMBER) ||
-          member.roles.cache.has(config.ROLE_BASE_OFFICER) ||
-          member.roles.cache.has(config.ROLE_BASE_VETERAN)) {
-        continue;
-      }
-      
-      // If they're not in any temp VC and not a guild member, remove the role
-      // Only do this for members who haven't been active in the last 24 hours
-      const twentyFourHoursAgo = Date.now() - (24 * 60 * 60 * 1000);
-      if (member.joinedTimestamp < twentyFourHoursAgo) {
-        try {
-          await member.roles.remove(config.STRAY_SPORE_ROLE_ID);
-          console.log(`Removed orphaned Stray Spore role from ${member.user.tag}`);
-        } catch (error) {
-          console.error(`Failed to remove Stray Spore role from ${member.user.tag}:`, error);
-        }
-      }
+
+    if (!tempOwners.has(channelId)) {
+      return { success: false, message: 'This is not a temporary War Chamber' };
     }
+
+    // Grant permissions
+    await channel.permissionOverwrites.create(member.id, {
+      Connect: true,
+      Speak: true,
+      UseVAD: true,
+    });
+
+    console.log(`Granted access to ${member.user.tag} for War Chamber: ${channel.name}`);
+    return { success: true };
+    
   } catch (error) {
-    console.error('Failed to sweep orphaned Stray Spores:', error);
+    console.error('Error granting access to member:', error);
+    return { success: false, message: 'Failed to grant access' };
   }
 }
 
-async function createAutoInvite(voiceChannel, member) {
+/**
+ * Check if a user owns a temp VC
+ * @param {string} userId 
+ * @returns {string|null} channelId if found, null otherwise
+ */
+export function getUserTempVC(userId) {
   try {
-    // Create a 24-hour invite directly to the voice channel
-    const invite = await voiceChannel.createInvite({
-      maxAge: 86400, // 24 hours
-      maxUses: 0,    // Unlimited uses
-      unique: true,
-      reason: `Auto-generated Stray Spore invite for ${member.user.tag}'s War Chamber`,
-    });
-
-    // Store invite data
-    tempInvites.set(voiceChannel.id, {
-      code: invite.code,
-      url: invite.url,
-      ownerId: member.id,
-      ownerTag: member.user.tag,
-      ownerDisplayName: member.displayName,
-      createdAt: new Date(),
-      expiresAt: new Date(Date.now() + 86400000), // 24 hours from now
-    });
-
-    console.log(`Auto-created War Chamber invite for ${member.user.tag}: ${invite.code}`);
-    return invite;
+    for (const [channelId, ownerId] of tempOwners.entries()) {
+      if (ownerId === userId) {
+        return channelId;
+      }
+    }
+    return null;
   } catch (error) {
-    console.error('Failed to create auto-invite for temp VC:', error);
+    console.error('Error checking user temp VC:', error);
     return null;
   }
 }
 
-async function sendInviteDM(member, invite, voiceChannel) {
+/**
+ * Clean up empty temp rooms and stale data
+ * @returns {Promise<{ok: boolean, cleaned: number, error?: string}>}
+ */
+export async function sweepTempRooms() {
   try {
-    const dmEmbed = new EmbedBuilder()
-      .setTitle('Your War Chamber is Ready!')
-      .setDescription([
-        `**${member.displayName}**, your War Chamber has been created!`,
-        '',
-        '**Stray Spore Invite Link:**',
-        `\`\`\`${invite.url}\`\`\``,
-        '',
-        '**How to Use:**',
-        '• Share this link with friends outside the guild',
-        '• They\'ll get Stray Spore role automatically',
-        '• They\'ll be moved to your War Chamber',
-        '• Invite expires in 24 hours',
-        '',
-        '**Note:** Guild members can find your chamber using `/vc goto host:${member.displayName}`'
-      ].join('\n'))
-      .setColor(0x8B4513)
-      .setTimestamp();
+    if (!client) {
+      return { ok: false, error: 'Service not initialized', cleaned: 0 };
+    }
 
-    await member.send({ embeds: [dmEmbed] });
-    console.log(`Sent War Chamber invite DM to ${member.user.tag}`);
-  } catch (error) {
-    console.error('Failed to send invite DM:', error);
-  }
-}
-
-// New function to post invite to voice channel chat
-async function postInviteToVoiceChat(voiceChannel, invite, member) {
-  try {
-    // Create message with instructions
-    const message = [
-      `**${member.displayName}'s War Chamber is Open!**`,
-      '',
-      '**For the Host:**',
-      '• Your invite link has been sent to your DMs',
-      '• Share that link with friends outside the guild',
-      '• They\'ll get Stray Spore role automatically',
-      '• They\'ll be moved to your War Chamber',
-      '',
-      '**For Guild Members:**',
-      `• Use \`/vc goto host:${member.displayName}\` to join this chamber`,
-      '',
-      '**Stray Spore Invite:**',
-      `${invite.url}`,
-      '',
-      '_This invite expires in 24 hours and gives unlimited uses._',
-      '',
-      '**New Stray Spores:** Use `/addalt` to set your WoW character name'
-    ].join('\n');
-
-    // Send to voice channel chat
-    await voiceChannel.send(message);
+    let cleanedCount = 0;
+    const guild = client.guilds.cache.get(config.GUILD_ID);
     
-    console.log(`Posted invite info to voice channel chat for ${member.user.tag}`);
-    return true;
-  } catch (error) {
-    console.error('Failed to post invite message to voice chat:', error);
-    return false;
-  }
-}
-
-export async function createTempVCFor(member) {
-  const guild = member.guild;
-  
-  const name = (config.TEMP_VC_NAME_FMT || 'War Chamber – {user}')
-    .replace('{user}', member.displayName);
-
-  // Check if user is in the OWNER_IDS list
-  const isHighProphet = isOwner(member.id);
-  
-  const overwrites = [
-    {
-      id: guild.roles.everyone.id,
-      deny: [
-        PermissionFlagsBits.ViewChannel,
-        PermissionFlagsBits.Connect, 
-        PermissionFlagsBits.CreateInstantInvite
-      ],
-    },
-    {
-      id: member.id,
-      allow: [
-        PermissionFlagsBits.ViewChannel,
-        PermissionFlagsBits.Connect,
-        PermissionFlagsBits.Speak,
-        PermissionFlagsBits.Stream,
-        PermissionFlagsBits.UseVAD,
-        PermissionFlagsBits.MuteMembers,
-        PermissionFlagsBits.DeafenMembers,
-        PermissionFlagsBits.MoveMembers,
-        PermissionFlagsBits.ManageChannels,
-        PermissionFlagsBits.SendMessages, // For voice chat
-        // Only High Prophets (owners defined in OWNER_IDS) can create invites
-        ...(isHighProphet ? [PermissionFlagsBits.CreateInstantInvite] : [])
-      ],
-    },
-    {
-      id: config.STRAY_SPORE_ROLE_ID, // Stray spores can connect
-      allow: [
-        PermissionFlagsBits.ViewChannel,
-        PermissionFlagsBits.Connect,
-        PermissionFlagsBits.Speak,
-        PermissionFlagsBits.UseVAD,
-        PermissionFlagsBits.SendMessages, // For voice chat
-      ],
-      deny: [PermissionFlagsBits.CreateInstantInvite],
-    },
-    {
-      id: guild.members.me.id, // Bot permissions
-      allow: [
-        PermissionFlagsBits.ViewChannel,
-        PermissionFlagsBits.Connect,
-        PermissionFlagsBits.MoveMembers,
-        PermissionFlagsBits.ManageChannels,
-        PermissionFlagsBits.CreateInstantInvite, // Bot needs this to create invites
-        PermissionFlagsBits.SendMessages, // For voice chat
-      ],
-    },
-  ];
-
-  const ch = await guild.channels.create({
-    name,
-    type: ChannelType.GuildVoice,
-    parent: CHANNELS.BATTLEFRONT,
-    userLimit: config.TEMP_VC_USER_LIMIT ?? undefined,
-    permissionOverwrites: overwrites,
-    reason: `Temp VC for ${member.user.tag}`,
-  });
-
-  tempOwners.set(ch.id, member.id);
-
-  // Grant temp Host role
-  if (config.TEMP_HOST_ROLE_ID) {
-    try {
-      await member.roles.add(config.TEMP_HOST_ROLE_ID);
-      console.log(`Granted Host role to ${member.user.tag}`);
-    } catch (e) {
-      console.error('Add Host role failed:', e);
+    if (!guild) {
+      return { ok: false, error: 'Guild not found', cleaned: 0 };
     }
-  }
 
-  // AUTO-CREATE INVITE - Only the bot creates invites
-  const invite = await createAutoInvite(ch, member);
-  if (invite) {
-    // Send DM to host with their invite
-    await sendInviteDM(member, invite, ch);
-    // Post instructions in voice channel chat
-    await postInviteToVoiceChat(ch, invite, member);
-  }
-
-  // Move member to new chamber
-  try {
-    await member.voice.setChannel(ch);
-  } catch (e) {
-    console.log('Could not auto-move member to new chamber:', e.message);
-  }
-
-  scheduleDeleteIfEmpty(ch.id, guild);
-
-  console.log('Created temp VC for', member.user.tag, '->', ch.name, `(${ch.id})`);
-  
-  return ch;
-}
-
-// Handle member join via temp VC invite
-export async function handleTempVCInviteJoin(member, inviteCode) {
-  // Find which temp VC this invite belongs to
-  let targetChannelId = null;
-  let inviteData = null;
-  
-  for (const [channelId, data] of tempInvites.entries()) {
-    if (data.code === inviteCode) {
-      targetChannelId = channelId;
-      inviteData = data;
-      break;
-    }
-  }
-  
-  if (!targetChannelId || !inviteData) return false;
-  
-  try {
-    // Assign Stray Spore role
-    if (config.STRAY_SPORE_ROLE_ID) {
-      const role = member.guild.roles.cache.get(config.STRAY_SPORE_ROLE_ID);
-      if (role && !member.roles.cache.has(role.id)) {
-        await member.roles.add(role);
-        console.log(`Auto-assigned Stray Spore role to ${member.user.tag} via War Chamber invite`);
+    // Get all tracked temp channels
+    const channelsToCheck = Array.from(tempOwners.keys());
+    
+    for (const channelId of channelsToCheck) {
+      try {
+        const channel = guild.channels.cache.get(channelId);
         
-        // Mark this user as needing to set their name
-        pendingNameSetups.add(member.id);
+        // Channel doesn't exist anymore
+        if (!channel) {
+          tempOwners.delete(channelId);
+          cleanedCount++;
+          console.log(`Cleaned up stale temp owner entry for deleted channel ${channelId}`);
+          continue;
+        }
+
+        // Channel is empty (no members)
+        if (channel.members.size === 0) {
+          try {
+            await channel.delete('Empty temp War Chamber cleanup');
+            tempOwners.delete(channelId);
+            cleanedCount++;
+            console.log(`Deleted empty temp War Chamber: ${channel.name}`);
+          } catch (deleteError) {
+            console.error(`Failed to delete empty War Chamber ${channelId}:`, deleteError);
+          }
+        }
+        
+      } catch (channelError) {
+        console.error(`Error checking temp channel ${channelId}:`, channelError);
+        // Remove from tracking if we can't access it
+        tempOwners.delete(channelId);
+        cleanedCount++;
       }
-    }
-    
-    // Move them to the voice channel if they're in voice
-    const voiceChannel = member.guild.channels.cache.get(targetChannelId);
-    if (voiceChannel && voiceChannel.type === ChannelType.GuildVoice && member.voice.channelId) {
-      try {
-        await member.voice.setChannel(voiceChannel);
-        console.log(`Moved ${member.user.tag} to War Chamber via invite`);
-      } catch (error) {
-        console.log(`Could not move ${member.user.tag} to voice channel:`, error.message);
-      }
-    }
-    
-    // Send welcome message to the voice channel
-    if (voiceChannel) {
-      voiceChannel.send(
-        `**${member.displayName}** has joined **${inviteData.ownerDisplayName}**'s War Chamber as a Stray Spore! Welcome!`
-      ).catch(() => {});
     }
 
-    // Send character name modal to new Stray Spore
-    try {
-      await sendCharacterNameDM(member);
-    } catch (error) {
-      console.log('Could not send character name DM to new Stray Spore:', error.message);
-    }
+    console.log(`Temp room sweep completed. Cleaned up ${cleanedCount} channels.`);
+    return { ok: true, cleaned: cleanedCount };
     
-    return true;
   } catch (error) {
-    console.error('Failed to handle temp VC invite join:', error);
-    return false;
+    console.error('Error in sweepTempRooms:', error);
+    return { ok: false, error: error.message, cleaned: 0 };
   }
 }
 
-// Send DM with character name setup instructions
-async function sendCharacterNameDM(member) {
+/**
+ * Get statistics about temp VCs
+ * @returns {{totalActive: number, owners: string[], channels: Array}}
+ */
+export function getTempVCStats() {
   try {
-    const nameButton = new ButtonBuilder()
-      .setCustomId(`setname`)
-      .setLabel('Set WoW Character Name')
-      .setStyle(ButtonStyle.Success);
-
-    const buttonRow = new ActionRowBuilder().addComponents(nameButton);
-
-    const dmEmbed = new EmbedBuilder()
-      .setTitle('Welcome, Stray Spore!')
-      .setDescription([
-        'Welcome to the guild! As a Stray Spore, please set your WoW character name.',
-        '',
-        'Click the button below to set your character name:',
-      ].join('\n'))
-      .setColor(0x9ACD32);
-
-    await member.send({ 
-      embeds: [dmEmbed],
-      components: [buttonRow]
-    });
-    console.log(`Sent character setup DM to ${member.user.tag}`);
-  } catch (error) {
-    console.error('Failed to send character setup DM:', error);
-  }
-}
-
-// Create the character name modal
-export function createCharacterNameModal() {
-  const modal = new ModalBuilder()
-    .setCustomId('character_name_modal')
-    .setTitle('Set WoW Character Name');
-
-  const nameInput = new TextInputBuilder()
-    .setCustomId('character_name')
-    .setLabel('Enter your WoW character name')
-    .setPlaceholder('e.g. Thrall')
-    .setMinLength(2)
-    .setMaxLength(24)
-    .setRequired(true)
-    .setStyle(TextInputStyle.Short);
-
-  const actionRow = new ActionRowBuilder().addComponents(nameInput);
-  modal.addComponents(actionRow);
-
-  return modal;
-}
-
-// Handle character name submission
-export async function handleCharacterNameSubmit(interaction) {
-  try {
-    const characterName = interaction.fields.getTextInputValue('character_name');
-    
-    // Validate character name
-    if (!/^[A-Za-z\s'-]{2,24}$/.test(characterName)) {
-      return interaction.reply({
-        content: 'Invalid character name. Please use only letters, spaces, apostrophes, and hyphens.',
-        ephemeral: true
-      });
+    if (!client) {
+      return { totalActive: 0, owners: [], channels: [] };
     }
-    
-    // Set the nickname
-    await interaction.member.setNickname(characterName, 'Stray Spore character name setup');
-    
-    // Remove from pending setups
-    pendingNameSetups.delete(interaction.user.id);
-    
-    return interaction.reply({
-      content: `✅ Your nickname has been set to **${characterName}**!`,
-      ephemeral: true
-    });
-  } catch (error) {
-    console.error('Failed to set character name:', error);
-    return interaction.reply({
-      content: 'Failed to set your nickname. Please try again later or contact a guild officer.',
-      ephemeral: true
-    });
-  }
-}
 
-// Get invite info for a temp VC
-export function getTempVCInviteInfo(channelId) {
-  return tempInvites.get(channelId) || null;
-}
+    const guild = client.guilds.cache.get(config.GUILD_ID);
+    if (!guild) {
+      return { totalActive: 0, owners: [], channels: [] };
+    }
 
-// Grant access to existing guild member
-export async function grantAccessToMember(member, channelId) {
-  try {
-    // Assign Stray Spore role if they don't have it
-    if (config.STRAY_SPORE_ROLE_ID && !member.roles.cache.has(config.STRAY_SPORE_ROLE_ID)) {
-      await member.roles.add(config.STRAY_SPORE_ROLE_ID);
-      console.log(`Granted Stray Spore role to ${member.user.tag} via access button`);
-    }
-    
-    // Get the channel
-    const channel = member.guild.channels.cache.get(channelId);
-    if (!channel) {
-      return { success: false, message: 'War Chamber not found.' };
-    }
-    
-    // If they're in voice, move them
-    if (member.voice.channelId) {
-      try {
-        await member.voice.setChannel(channel);
-        return { 
-          success: true, 
-          message: `You now have access to the War Chamber! You've been moved to ${channel.name}.` 
-        };
-      } catch (error) {
-        return { 
-          success: true, 
-          message: `You now have access to the War Chamber! Join voice and use /vc to move there.` 
-        };
+    const activeChannels = [];
+    const ownerIds = [];
+
+    for (const [channelId, ownerId] of tempOwners.entries()) {
+      const channel = guild.channels.cache.get(channelId);
+      if (channel) {
+        activeChannels.push({
+          id: channelId,
+          name: channel.name,
+          memberCount: channel.members.size,
+          ownerId: ownerId
+        });
+        ownerIds.push(ownerId);
       }
-    } else {
-      return { 
-        success: true, 
-        message: `You now have access to the War Chamber! Join voice and use /vc to move there.` 
-      };
     }
+
+    return {
+      totalActive: activeChannels.length,
+      owners: ownerIds,
+      channels: activeChannels
+    };
   } catch (error) {
-    console.error('Failed to grant access:', error);
-    return { success: false, message: 'Failed to grant access. Please try again later.' };
+    console.error('Error getting temp VC stats:', error);
+    return { totalActive: 0, owners: [], channels: [] };
+  }
+}
+
+/**
+ * Force cleanup of a specific temp VC (admin function)
+ * @param {string} channelId 
+ * @returns {Promise<{ok: boolean, error?: string}>}
+ */
+export async function forceCleanupTempVC(channelId) {
+  try {
+    if (!client) {
+      return { ok: false, error: 'Service not initialized' };
+    }
+
+    const guild = client.guilds.cache.get(config.GUILD_ID);
+    if (!guild) {
+      return { ok: false, error: 'Guild not found' };
+    }
+
+    const channel = guild.channels.cache.get(channelId);
+    
+    if (channel) {
+      await channel.delete('Force cleanup by admin');
+    }
+    
+    tempOwners.delete(channelId);
+    console.log(`Force cleaned up temp VC: ${channelId}`);
+    
+    return { ok: true };
+    
+  } catch (error) {
+    console.error('Error force cleaning up temp VC:', error);
+    return { ok: false, error: error.message };
   }
 }

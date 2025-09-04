@@ -4,13 +4,22 @@ import { supabase } from '../db.js';
 
 export const CharacterDB = {
   async addCharacter(userId, name, charClass, realm, isMain) {
+    if (!userId || !name) {
+      throw new Error('userId and name are required');
+    }
+
     try {
       // If setting as main, first unset all other mains for this user
       if (isMain) {
-        await supabase
+        const { error: unsetError } = await supabase
           .from('characters')
           .update({ is_main: false })
           .eq('user_id', userId);
+        
+        if (unsetError) {
+          console.error('Failed to unset main characters:', unsetError);
+          throw unsetError;
+        }
       }
 
       // Insert or update the character
@@ -18,15 +27,18 @@ export const CharacterDB = {
         .from('characters')
         .upsert({
           user_id: userId,
-          name: name,
-          class: charClass || null,
-          realm: realm || null,
+          name: name.trim(),
+          class: charClass?.trim() || null,
+          realm: realm?.trim() || null,
           is_main: !!isMain
         }, {
           onConflict: 'user_id,name'
         });
 
-      if (error) throw error;
+      if (error) {
+        console.error('Failed to upsert character:', error);
+        throw error;
+      }
       return true;
     } catch (error) {
       console.error('Failed to add character:', error);
@@ -35,6 +47,10 @@ export const CharacterDB = {
   },
 
   async getCharacters(userId) {
+    if (!userId) {
+      throw new Error('userId is required');
+    }
+
     try {
       const { data, error } = await supabase
         .from('characters')
@@ -43,7 +59,10 @@ export const CharacterDB = {
         .order('is_main', { ascending: false })
         .order('created_at', { ascending: true });
 
-      if (error) throw error;
+      if (error) {
+        console.error('Failed to fetch characters:', error);
+        throw error;
+      }
 
       return (data || []).map(r => ({
         id: r.id,
@@ -61,15 +80,22 @@ export const CharacterDB = {
   },
 
   async characterExists(userId, name) {
+    if (!userId || !name) {
+      throw new Error('userId and name are required');
+    }
+
     try {
       const { data, error } = await supabase
         .from('characters')
         .select('id')
         .eq('user_id', userId)
-        .ilike('name', name) // Case-insensitive comparison
+        .ilike('name', name.trim()) // Case-insensitive comparison
         .limit(1);
 
-      if (error) throw error;
+      if (error) {
+        console.error('Failed to check character existence:', error);
+        throw error;
+      }
       return (data || []).length > 0;
     } catch (error) {
       console.error('Failed to check character existence:', error);
@@ -78,12 +104,16 @@ export const CharacterDB = {
   },
 
   async getCharacter(userId, name) {
+    if (!userId || !name) {
+      throw new Error('userId and name are required');
+    }
+
     try {
       const { data, error } = await supabase
         .from('characters')
         .select('id, user_id, name, class, realm, is_main, created_at')
         .eq('user_id', userId)
-        .ilike('name', name) // Case-insensitive comparison
+        .ilike('name', name.trim()) // Case-insensitive comparison
         .limit(1)
         .single();
 
@@ -91,6 +121,7 @@ export const CharacterDB = {
         if (error.code === 'PGRST116') { // No rows returned
           return null;
         }
+        console.error('Failed to fetch character:', error);
         throw error;
       }
 
@@ -110,14 +141,21 @@ export const CharacterDB = {
   },
 
   async removeCharacter(userId, name) {
+    if (!userId || !name) {
+      throw new Error('userId and name are required');
+    }
+
     try {
       const { error } = await supabase
         .from('characters')
         .delete()
         .eq('user_id', userId)
-        .ilike('name', name); // Case-insensitive comparison
+        .ilike('name', name.trim()); // Case-insensitive comparison
 
-      if (error) throw error;
+      if (error) {
+        console.error('Failed to remove character:', error);
+        throw error;
+      }
       return true;
     } catch (error) {
       console.error('Failed to remove character:', error);
@@ -126,6 +164,10 @@ export const CharacterDB = {
   },
 
   async setMainCharacter(userId, name) {
+    if (!userId || !name) {
+      throw new Error('userId and name are required');
+    }
+
     try {
       // First, unset all other mains
       const { error: unsetError } = await supabase
@@ -133,16 +175,22 @@ export const CharacterDB = {
         .update({ is_main: false })
         .eq('user_id', userId);
 
-      if (unsetError) throw unsetError;
+      if (unsetError) {
+        console.error('Failed to unset main characters:', unsetError);
+        throw unsetError;
+      }
 
       // Set the specified character as main
       const { error: setError } = await supabase
         .from('characters')
         .update({ is_main: true })
         .eq('user_id', userId)
-        .ilike('name', name); // Case-insensitive comparison
+        .ilike('name', name.trim()); // Case-insensitive comparison
 
-      if (setError) throw setError;
+      if (setError) {
+        console.error('Failed to set main character:', setError);
+        throw setError;
+      }
       return true;
     } catch (error) {
       console.error('Failed to set main character:', error);
@@ -151,14 +199,21 @@ export const CharacterDB = {
   },
 
   async deleteCharacter(userId, name) {
+    if (!userId || !name) {
+      throw new Error('userId and name are required');
+    }
+
     try {
       const { error } = await supabase
         .from('characters')
         .delete()
         .eq('user_id', userId)
-        .ilike('name', name); // Case-insensitive comparison
+        .ilike('name', name.trim()); // Case-insensitive comparison
 
-      if (error) throw error;
+      if (error) {
+        console.error('Failed to delete character:', error);
+        throw error;
+      }
       return true;
     } catch (error) {
       console.error('Failed to delete character:', error);

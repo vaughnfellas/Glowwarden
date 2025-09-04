@@ -136,13 +136,21 @@ export async function execute(interaction) {
   const sub = interaction.options.getSubcommand();
 
   if (sub === 'show') {
-    const me = await interaction.guild.members.fetchMe();
-    const perms = me.permissionsIn(interaction.channel).toArray().sort();
-    return interaction.reply({
-      ephemeral: true,
-      content: `**My permissions in ${interaction.channel}:**\n` + (perms.length ? '• ' + perms.join('\n• ') : '_none_'),
-    });
-  }
+    try {
+             const me = await interaction.guild.members.fetchMe();
+             const perms = me.permissionsIn(interaction.channel).toArray().sort();
+             return interaction.reply({
+               flags: MessageFlags.Ephemeral,
+               content: `**My permissions in ${interaction.channel}:**\n` + (perms.length ? '• ' + perms.join('\n• ') : '_none_'),
+             });
+           } catch (error) {
+             console.error('Failed to fetch permissions:', error);
+             return interaction.reply({
+               flags: MessageFlags.Ephemeral,
+               content: '❌ Failed to check permissions.'
+             });
+           }
+          }
 
   const entries = {
     [CHANNELS.CHAMBER_OF_OATHS]: {

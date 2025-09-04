@@ -53,5 +53,4 @@ export async function execute(interaction) {
     )
     .setFooter({ text: 'Note: If a command is "Available" but still not in the picker, it is likely channel-restricted via Integrations → Glowwarden → Commands.' });
 
-  await interaction.reply({ embeds: [embed], ephemeral: true });
-}
+\await interaction.reply({ embeds: [embed], flags: MessageFlags.Ephemeral });}

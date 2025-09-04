@@ -1,5 +1,5 @@
 // src/database/invites.js
-import { supabase } from '../db.js'; // Use the centralized client
+import { supabase } from '../db.js';
 
 export class InviteDB {
   static async addInviteMapping(inviteCode, roleId, createdBy, expiresAt = null, maxUses = 1) {
@@ -13,21 +13,21 @@ export class InviteDB {
             created_by: createdBy,
             expires_at: expiresAt,
             max_uses: maxUses,
-            created_at: new Date().toISOString() // Explicitly set created_at
+            created_at: new Date().toISOString()
           }
         ])
-        .select(); // Return the inserted data
+        .select();
       
       if (error) {
         console.error('Supabase error in addInviteMapping:', error);
-        throw error;
+        return { ok: false, error: error.message };
       }
       
       console.log(`Added invite mapping: ${inviteCode} -> role ${roleId}`);
-      return data?.[0] || true;
+      return { ok: true, data: data?.[0] };
     } catch (error) {
       console.error('Failed to add invite mapping to database:', error);
-      return false;
+      return { ok: false, error: 'Database operation failed' };
     }
   }
 
@@ -37,17 +37,17 @@ export class InviteDB {
         .from('invite_mappings')
         .select('*')
         .eq('invite_code', inviteCode)
-        .maybeSingle(); // Use maybeSingle instead of single to avoid errors when no record found
+        .maybeSingle();
       
       if (error) {
         console.error('Supabase error in getInviteMapping:', error);
-        return null;
+        return { ok: false, error: error.message };
       }
       
-      return data;
+      return { ok: true, data };
     } catch (error) {
       console.error('Failed to get invite mapping from database:', error);
-      return null;
+      return { ok: false, error: 'Database operation failed' };
     }
   }
 
@@ -60,13 +60,13 @@ export class InviteDB {
       
       if (error) {
         console.error('Supabase error in getAllInviteMappings:', error);
-        return [];
+        return { ok: false, error: error.message };
       }
       
-      return data || [];
+      return { ok: true, data: data || [] };
     } catch (error) {
       console.error('Failed to get all invite mappings from database:', error);
-      return [];
+      return { ok: false, error: 'Database operation failed' };
     }
   }
 
@@ -79,14 +79,14 @@ export class InviteDB {
       
       if (error) {
         console.error('Supabase error in removeInviteMapping:', error);
-        throw error;
+        return { ok: false, error: error.message };
       }
       
       console.log(`Removed invite mapping: ${inviteCode}`);
-      return true;
+      return { ok: true };
     } catch (error) {
       console.error('Failed to remove invite mapping from database:', error);
-      return false;
+      return { ok: false, error: 'Database operation failed' };
     }
   }
 
@@ -97,27 +97,27 @@ export class InviteDB {
         .from('invite_mappings')
         .delete()
         .lt('expires_at', now)
-        .not('expires_at', 'is', null) // Only delete records where expires_at is not null
-        .select(); // Return deleted records for logging
+        .not('expires_at', 'is', null)
+        .select();
       
       if (error) {
         console.error('Supabase error in cleanupExpiredInvites:', error);
-        throw error;
+        return { ok: false, error: error.message };
       }
       
-      if (data?.length > 0) {
-        console.log(`Cleaned up ${data.length} expired invite mappings:`, 
+      const cleanedCount = data?.length || 0;
+      if (cleanedCount > 0) {
+        console.log(`Cleaned up ${cleanedCount} expired invite mappings:`, 
           data.map(d => d.invite_code).join(', '));
       }
       
-      return data?.length || 0;
+      return { ok: true, data: { cleanedCount, codes: data?.map(d => d.invite_code) || [] } };
     } catch (error) {
       console.error('Failed to clean up expired invites:', error);
-      return false;
+      return { ok: false, error: 'Database operation failed' };
     }
   }
 
-  // Additional helper method to get active invites for a specific role
   static async getActiveInvitesForRole(roleId) {
     try {
       const now = new Date().toISOString();
@@ -125,22 +125,21 @@ export class InviteDB {
         .from('invite_mappings')
         .select('*')
         .eq('role_id', roleId)
-        .or(`expires_at.is.null,expires_at.gt.${now}`) // Not expired
+        .or(`expires_at.is.null,expires_at.gt.${now}`)
         .order('created_at', { ascending: false });
       
       if (error) {
         console.error('Supabase error in getActiveInvitesForRole:', error);
-        return [];
+        return { ok: false, error: error.message };
       }
       
-      return data || [];
+      return { ok: true, data: data || [] };
     } catch (error) {
       console.error('Failed to get active invites for role:', error);
-      return [];
+      return { ok: false, error: 'Database operation failed' };
     }
   }
 
-  // Helper method to update invite usage count (if you want to track usage)
   static async incrementInviteUsage(inviteCode) {
     try {
       const { data, error } = await supabase
@@ -148,13 +147,13 @@ export class InviteDB {
       
       if (error) {
         console.error('Supabase error in incrementInviteUsage:', error);
-        return false;
+        return { ok: false, error: error.message };
       }
       
-      return true;
+      return { ok: true, data };
     } catch (error) {
       console.error('Failed to increment invite usage:', error);
-      return false;
+      return { ok: false, error: 'Database operation failed' };
     }
   }
 }

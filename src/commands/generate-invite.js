@@ -18,7 +18,13 @@ export const getDynamicInviteMap = () => dynamicInviteRoleMap;
 // Load all invite mappings from database on startup
 export async function loadInviteMappingsFromDB() {
   try {
-    const mappings = await InviteDB.getAllInviteMappings();
+    const result = await InviteDB.getAllInviteMappings();
+    if (!result.ok) {
+      console.error('Failed to load invite mappings from database:', result.error);
+      return false;
+    }
+
+    const mappings = result.data || [];
     mappings.forEach(mapping => {
       dynamicInviteRoleMap.set(mapping.invite_code, mapping.role_id);
     });
@@ -147,13 +153,20 @@ export async function execute(interaction) {
     dynamicInviteRoleMap.set(invite.code, roleId);
 
     // Store in database for persistence
-    await InviteDB.addInviteMapping(
+    const dbResult = await InviteDB.addInviteMapping(
       invite.code,
       roleId,
       interaction.user.id,
       expiresAt,
       maxUses
     );
+
+    if (!dbResult.ok) {
+      console.error(`[Guild:${interaction.guildId}][User:${interaction.user.id}] Failed to store invite mapping for ${invite.code}:`, dbResult.error);
+      // Still continue since in-memory map is set
+    } else {
+      console.log(`[Guild:${interaction.guildId}][User:${interaction.user.id}] Stored invite mapping: ${invite.code} -> ${roleName}`);
+    }
 
     // Format expiration text
     let expirationText;
@@ -184,13 +197,13 @@ export async function execute(interaction) {
         `This invite will automatically assign the ${roleName} role to new members.`,
         `The mapping has been saved to the database and will persist across bot restarts.`
       ].join('\n'),
-      ephemeral: true,
+      flags: MessageFlags.Ephemeral,
     });
   } catch (err) {
-    console.error('Invite creation failed:', err);
+    console.error(`[Guild:${interaction.guildId}][User:${interaction.user.id}] Invite creation failed:`, err);
     await interaction.reply({
       content: 'I couldn\'t create the invite. Do I have **Create Invite** and **View Channel** permissions?',
-      ephemeral: true,
+      flags: MessageFlags.Ephemeral,
     });
   }
 }
