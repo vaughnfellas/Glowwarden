@@ -10,36 +10,32 @@ let supabaseInstance = null;
  */
 export function getSupabase() {
   if (!supabaseInstance) {
-    if (!config.SUPABASE_URL || !config.SUPABASE_ANON_KEY) {
-      throw new Error('Supabase configuration missing. Please set SUPABASE_URL and SUPABASE_ANON_KEY in your config.');
+    if (!config.SUPABASE_URL || !config.SUPABASE_SERVICE_KEY) {
+      throw new Error(
+        'Supabase configuration missing. Please set SUPABASE_URL and SUPABASE_SERVICE_KEY in your config.'
+      );
     }
-    
+
     supabaseInstance = createClient(
-      config.SUPABASE_URL, 
-      config.SUPABASE_ANON_KEY,
+      config.SUPABASE_URL,
+      config.SUPABASE_SERVICE_KEY,
       {
-        auth: {
-          persistSession: false, // No session persistence for bot
-        },
-        realtime: {
-          params: {
-            eventsPerSecond: 2, // Limit real-time events for bot usage
-          },
-        },
+        auth: { persistSession: false },
+        realtime: { params: { eventsPerSecond: 2 } },
       }
     );
-    
-    console.log('Supabase client initialized');
+
+    console.log('✅ Supabase client initialized');
   }
-  
+
   return supabaseInstance;
 }
 
-// Export singleton instance for convenience
+// Export singleton getter
 export const supabase = {
   get client() {
     return getSupabase();
-  }
+  },
 };
 
 /**
@@ -48,31 +44,24 @@ export const supabase = {
  */
 export async function testConnection() {
   try {
-    const { data, error } = await getSupabase()
-      .from('temp_vcs') // Assuming you have a temp_vcs table
+    const { error } = await getSupabase()
+      .from('temp_vcs')
       .select('count')
       .limit(1);
-    
-    if (error) {
-      return { ok: false, error: error.message };
-    }
-    
+
+    if (error) return { ok: false, error: error.message };
     return { ok: true };
-  } catch (error) {
-    return { ok: false, error: error.message };
+  } catch (err) {
+    return { ok: false, error: err.message };
   }
 }
 
 /**
- * Database operations for temp VCs (example implementation)
+ * Database operations for temp VCs
  */
 export const tempVCDB = {
   /**
    * Save temp VC to database
-   * @param {string} channelId 
-   * @param {string} ownerId 
-   * @param {string} guildId 
-   * @returns {Promise<{ok: boolean, error?: string}>}
    */
   async create(channelId, ownerId, guildId) {
     try {
@@ -83,26 +72,38 @@ export const tempVCDB = {
           owner_id: ownerId,
           guild_id: guildId,
           created_at: new Date().toISOString(),
-          last_active: new Date().toISOString()
+          last_active: new Date().toISOString(),
         });
-      
+
       if (error) {
         console.error('Database error creating temp VC:', error);
         return { ok: false, error: error.message };
       }
-      
       return { ok: true };
-    } catch (error) {
-      console.error('Error saving temp VC to database:', error);
-      return { ok: false, error: error.message };
+    } catch (err) {
+      console.error('Error saving temp VC:', err);
+      return { ok: false, error: err.message };
     }
   },
 
   /**
    * Update last active time for temp VC
-   * @param {string} channelId 
-   * @returns {Promise<{ok: boolean, error?: string}>}
    */
   async updateLastActive(channelId) {
     try {
-      const { error } = await getSupabase
+      const { error } = await getSupabase()
+        .from('temp_vcs')
+        .update({ last_active: new Date().toISOString() })
+        .eq('channel_id', channelId);
+
+      if (error) {
+        console.error('Database error updating temp VC:', error);
+        return { ok: false, error: error.message };
+      }
+      return { ok: true };
+    } catch (err) {
+      console.error('Error updating temp VC:', err);
+      return { ok: false, error: err.message };
+    }
+  },
+};

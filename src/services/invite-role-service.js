@@ -2,7 +2,7 @@
 import { Events, PermissionFlagsBits, EmbedBuilder } from 'discord.js';
 import { config } from '../config.js';
 import { CHANNELS } from '../channels.js';
-import { handleTempVCInviteJoin, tempInvites } from './temp-vc-service.js';
+import { handleTempVCInviteJoin, isWarChamberInvite } from './temp-vc-service.js';
 import { getDynamicInviteMap, loadInviteMappingsFromDB } from '../commands/generate-invite.js';
 import { InviteDB } from '../database/invites.js';
 
@@ -72,17 +72,6 @@ async function startOathCeremony(member, roleId) {
   }
 }
 
-// Check if an invite code belongs to a War Chamber
-function isWarChamberInvite(code) {
-  // Check all temp invites to see if this code matches any of them
-  for (const [_, inviteData] of tempInvites.entries()) {
-    if (inviteData.code === code) {
-      return true;
-    }
-  }
-  return false;
-}
-
 // Check if a role ID is a base role that requires oath ceremony
 function isBaseRole(roleId) {
   return roleId === config.ROLE_BASE_MEMBER || 
@@ -91,15 +80,18 @@ function isBaseRole(roleId) {
 }
 
 async function assignRoleForCode(member, code) {
-  // First, check if this is a War Chamber invite
-  if (code && isWarChamberInvite(code)) {
-    // Process as War Chamber invite
-    const success = await handleTempVCInviteJoin(member, code);
-    return { 
-      assigned: success, 
-      type: 'temp_vc', 
-      roleId: config.STRAY_SPORE_ROLE_ID 
-    };
+  // First, check if this is a War Chamber invite (check database)
+  if (code) {
+    const isWarChamber = await isWarChamberInvite(code);
+    if (isWarChamber) {
+      // Process as War Chamber invite
+      const success = await handleTempVCInviteJoin(member, code);
+      return { 
+        assigned: success, 
+        type: 'temp_vc', 
+        roleId: config.STRAY_SPORE_ROLE_ID 
+      };
+    }
   }
   
   // Second, check database for invite mapping

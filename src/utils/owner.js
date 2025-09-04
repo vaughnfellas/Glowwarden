@@ -1,23 +1,74 @@
-// src/utils/owner.js - Centralized permission and ownership checks
+// src/utils/owner.js — Centralized ownership & permission helpers
+import { PermissionFlagsBits, MessageFlags } from 'discord.js';
 import { config } from '../config.js';
 import { tempOwners } from '../services/temp-vc-service.js';
 
 /**
- * Check if a member is a guild member (not a Stray Spore)
- * @param {GuildMember} member 
+ * Returns true if the userId is listed as an owner.
+ * Supports either config.OWNER_ID (single) or config.OWNER_IDS (comma-separated).
+ * @param {string} userId
+ * @returns {boolean}
+ */
+export function isOwner(userId) {
+  const raw =
+    (config?.OWNER_IDS ?? config?.OWNER_ID ?? '')
+      .toString()
+      .trim();
+
+  if (!raw) return false;
+  const owners = raw.split(',').map(s => s.trim()).filter(Boolean);
+  return owners.includes(userId);
+}
+
+/**
+ * Ephemerally denies non-owners; optionally allows Administrator fallback.
+ * Returns true if the caller may proceed.
+ * @param {import('discord.js').CommandInteraction | import('discord.js').Interaction} interaction
+ * @param {{ allowAdminFallback?: boolean }} [opts]
+ * @returns {Promise<boolean>}
+ */
+export async function checkOwnerPermission(interaction, { allowAdminFallback = true } = {}) {
+  try {
+    const isOwn = isOwner(interaction.user?.id ?? '');
+    const isAdmin = allowAdminFallback
+      ? Boolean(interaction.memberPermissions?.has?.(PermissionFlagsBits.Administrator))
+      : false;
+
+    if (isOwn || isAdmin) return true;
+
+    const msg = 'Only the High Prophet may invoke this command.';
+    if (interaction.deferred || interaction.replied) {
+      await interaction.followUp({ content: msg, flags: MessageFlags.Ephemeral });
+    } else {
+      await interaction.reply({ content: msg, flags: MessageFlags.Ephemeral });
+    }
+  } catch (err) {
+    // Last-resort guard to avoid throwing from a permission check
+    // eslint-disable-next-line no-console
+    console.error('checkOwnerPermission error:', err);
+  }
+  return false;
+}
+
+/**
+ * True if a member has any base guild role and is NOT a Stray Spore.
+ * @param {import('discord.js').GuildMember} member
  * @returns {boolean}
  */
 export function isGuildMember(member) {
   try {
-    // Check if member has any of the base guild roles
+    const cache = member?.roles?.cache;
+    if (!cache) return false;
+
     const guildRoles = [
       config.ROLE_BASE_MEMBER,
-      config.ROLE_BASE_OFFICER, 
-      config.ROLE_BASE_VETERAN
-    ].filter(roleId => roleId); // Filter out undefined roles
+      config.ROLE_BASE_OFFICER,
+      config.ROLE_BASE_VETERAN,
+    ].filter(Boolean);
 
-    return guildRoles.some(roleId => member.roles.cache.has(roleId)) &&
-           !member.roles.cache.has(config.ROLE_STRAY_SPORE_ID);
+    const hasBase = guildRoles.some(roleId => cache.has(roleId));
+    const isStray = cache.has(config.ROLE_STRAY_SPORE_ID);
+    return hasBase && !isStray;
   } catch (error) {
     console.error('Error checking if member is guild member:', error);
     return false;
@@ -25,13 +76,12 @@ export function isGuildMember(member) {
 }
 
 /**
- * Check if a member is a Stray Spore
- * @param {GuildMember} member 
- * @returns {boolean}
+ * True if member is a Stray Spore.
+ * @param {import('discord.js').GuildMember} member
  */
 export function isStraySpore(member) {
   try {
-    return member.roles.cache.has(config.ROLE_STRAY_SPORE_ID);
+    return Boolean(member?.roles?.cache?.has(config.ROLE_STRAY_SPORE_ID));
   } catch (error) {
     console.error('Error checking if member is stray spore:', error);
     return false;
@@ -39,14 +89,13 @@ export function isStraySpore(member) {
 }
 
 /**
- * Check if a member is an officer or higher
- * @param {GuildMember} member 
- * @returns {boolean}
+ * True if member is officer or veteran.
+ * @param {import('discord.js').GuildMember} member
  */
 export function isOfficerOrHigher(member) {
   try {
-    return member.roles.cache.has(config.ROLE_BASE_OFFICER) || 
-           member.roles.cache.has(config.ROLE_BASE_VETERAN);
+    const cache = member?.roles?.cache;
+    return Boolean(cache?.has(config.ROLE_BASE_OFFICER) || cache?.has(config.ROLE_BASE_VETERAN));
   } catch (error) {
     console.error('Error checking if member is officer or higher:', error);
     return false;
@@ -54,16 +103,14 @@ export function isOfficerOrHigher(member) {
 }
 
 /**
- * Check if a user owns a temp VC
- * @param {string} userId 
- * @returns {string|null} channelId if owned, null otherwise
+ * If user owns a temp VC, returns its channelId; else null.
+ * @param {string} userId
+ * @returns {string|null}
  */
 export function getUserOwnedTempVC(userId) {
   try {
     for (const [channelId, ownerId] of tempOwners.entries()) {
-      if (ownerId === userId) {
-        return channelId;
-      }
+      if (ownerId === userId) return channelId;
     }
     return null;
   } catch (error) {
@@ -73,9 +120,8 @@ export function getUserOwnedTempVC(userId) {
 }
 
 /**
- * Check if a channel is a temp VC
- * @param {string} channelId 
- * @returns {boolean}
+ * True if a channelId refers to a temp VC.
+ * @param {string} channelId
  */
 export function isTempVC(channelId) {
   try {
@@ -87,9 +133,9 @@ export function isTempVC(channelId) {
 }
 
 /**
- * Get the owner of a temp VC
- * @param {string} channelId 
- * @returns {string|null} ownerId if found, null otherwise
+ * Gets the owner userId of a temp VC, if any.
+ * @param {string} channelId
+ * @returns {string|null}
  */
 export function getTempVCOwner(channelId) {
   try {
@@ -101,26 +147,24 @@ export function getTempVCOwner(channelId) {
 }
 
 /**
- * Check if a member can use temp VC commands
- * @param {GuildMember} member 
+ * Whether a member can use temp VC commands.
+ * @param {import('discord.js').GuildMember} member
  * @returns {{allowed: boolean, reason?: string}}
  */
 export function canUseTempVCCommands(member) {
   try {
-    if (isGuildMember(member)) {
-      return { allowed: true };
-    }
-    
+    if (isGuildMember(member)) return { allowed: true };
+
     if (isStraySpore(member)) {
-      return { 
-        allowed: false, 
-        reason: 'This command is only available to guild members. Stray Spores should use the invite link provided by their host.' 
+      return {
+        allowed: false,
+        reason:
+          'This command is only available to guild members. Stray Spores should use the invite link provided by their host.',
       };
     }
-    
-    return { 
-      allowed: false, 
-      reason: 'You need to be a guild member to use this command.' 
+    return {
+      allowed: false,
+      reason: 'You need to be a guild member to use this command.',
     };
   } catch (error) {
     console.error('Error checking temp VC command permissions:', error);
@@ -129,28 +173,20 @@ export function canUseTempVCCommands(member) {
 }
 
 /**
- * Check if a member can manage a specific temp VC
- * @param {GuildMember} member 
- * @param {string} channelId 
+ * Whether a member can manage a specific temp VC.
+ * Officers/Veterans can manage any; owners can manage their own.
+ * @param {import('discord.js').GuildMember} member
+ * @param {string} channelId
  * @returns {{allowed: boolean, reason?: string}}
  */
 export function canManageTempVC(member, channelId) {
   try {
-    // Officers and veterans can manage any temp VC
-    if (isOfficerOrHigher(member)) {
-      return { allowed: true };
-    }
-    
-    // Owner can manage their own temp VC
+    if (isOfficerOrHigher(member)) return { allowed: true };
+
     const owner = getTempVCOwner(channelId);
-    if (owner === member.id) {
-      return { allowed: true };
-    }
-    
-    return { 
-      allowed: false, 
-      reason: 'You can only manage your own War Chamber.' 
-    };
+    if (owner && owner === member?.id) return { allowed: true };
+
+    return { allowed: false, reason: 'You can only manage your own War Chamber.' };
   } catch (error) {
     console.error('Error checking temp VC management permissions:', error);
     return { allowed: false, reason: 'Error checking permissions.' };
@@ -158,24 +194,17 @@ export function canManageTempVC(member, channelId) {
 }
 
 /**
- * Get user permission level
- * @param {GuildMember} member 
+ * Returns a normalized permission level string for a member.
+ * @param {import('discord.js').GuildMember} member
  * @returns {'veteran'|'officer'|'member'|'stray_spore'|'none'}
  */
 export function getUserPermissionLevel(member) {
   try {
-    if (member.roles.cache.has(config.ROLE_BASE_VETERAN)) {
-      return 'veteran';
-    }
-    if (member.roles.cache.has(config.ROLE_BASE_OFFICER)) {
-      return 'officer';
-    }
-    if (member.roles.cache.has(config.ROLE_BASE_MEMBER)) {
-      return 'member';
-    }
-    if (member.roles.cache.has(config.ROLE_STRAY_SPORE_ID)) {
-      return 'stray_spore';
-    }
+    const cache = member?.roles?.cache;
+    if (cache?.has(config.ROLE_BASE_VETERAN)) return 'veteran';
+    if (cache?.has(config.ROLE_BASE_OFFICER)) return 'officer';
+    if (cache?.has(config.ROLE_BASE_MEMBER)) return 'member';
+    if (cache?.has(config.ROLE_STRAY_SPORE_ID)) return 'stray_spore';
     return 'none';
   } catch (error) {
     console.error('Error getting user permission level:', error);
@@ -184,17 +213,17 @@ export function getUserPermissionLevel(member) {
 }
 
 /**
- * Format permission level for display
- * @param {string} level 
+ * Pretty label for a permission level.
+ * @param {'veteran'|'officer'|'member'|'stray_spore'|'none'} level
  * @returns {string}
  */
 export function formatPermissionLevel(level) {
   const levels = {
-    'veteran': '🏆 Veteran',
-    'officer': '⭐ Officer', 
-    'member': '🛡️ Member',
-    'stray_spore': '🌱 Stray Spore',
-    'none': '❓ Unknown'
+    veteran: '🏆 Veteran',
+    officer: '⭐ Officer',
+    member: '🛡️ Member',
+    stray_spore: '🌱 Stray Spore',
+    none: '❓ Unknown',
   };
-  return levels[level] || levels.none;
+  return levels[level] ?? levels.none;
 }

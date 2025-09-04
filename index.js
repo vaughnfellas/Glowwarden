@@ -15,9 +15,10 @@ process.on('uncaughtException', (err) => {
 import { Client, GatewayIntentBits } from 'discord.js';
 import { loadEvents } from './src/events/index.js';
 import { config } from './src/config.js';
-import { tempInvites } from './src/services/temp-vc-service.js';
 import { loadCommands } from './src/commands/index.js';
 import { supabase } from './src/db.js';
+import { initInviteRoleService } from './src/services/invite-role-service.js';
+import { initTempVCService, sweepTempRooms } from './src/services/temp-vc-service.js';
 
 function setupShutdown(client) {
   const shutdown = async (signal) => {
@@ -75,19 +76,6 @@ const client = new Client({
   ],
 });
 
-// Fixed: Proper event handler syntax
-client.once(Events.ClientReady, () => {
-  console.log(`[READY] Bot ready as ${client.user.tag}`);
-});
-
-client.on('shardReady', (id) => {
-  console.log(`[SHARD] Shard ${id} ready`);
-});
-
-client.on('shardResume', (id, replayed) => {
-  console.log(`[SHARD] Shard ${id} resumed (replayed=${replayed})`);
-});
-
 // Set up shutdown handlers now that we have client
 setupShutdown(client);
 
@@ -97,21 +85,6 @@ client.on('shardDisconnect', (event, id) => {
 
 client.on('warn', (m) => console.warn('[DISCORD] Warning:', m));
 client.on('error', (e) => console.error('[DISCORD] Error:', e));
-
-// Function to clean up expired temp VC invites
-function cleanupExpiredInvites() {
-  const now = new Date();
-  let cleanedCount = 0;
-  for (const [channelId, inviteData] of tempInvites.entries()) {
-    if (inviteData.expiresAt && inviteData.expiresAt < now) {
-      tempInvites.delete(channelId);
-      cleanedCount++;
-    }
-  }
-  if (cleanedCount > 0) {
-    console.log(`[CLEANUP] Removed ${cleanedCount} expired invites`);
-  }
-}
 
 // Reconnection function with exponential backoff
 function attemptReconnect() {
@@ -150,8 +123,8 @@ loadCommands(client);
 console.log('[INIT] Loading events...');
 loadEvents(client);
 
-// Set up cleanup interval when ready (Fixed: removed duplicate event handler)
-client.once(Events.ClientReady, () => {
+// Initialize services when client is ready
+client.once(Events.ClientReady, async () => {
   console.log(`[READY] Logged in as ${client.user.tag}`);
   
   // Reset reconnection attempts on successful connection
@@ -161,10 +134,34 @@ client.once(Events.ClientReady, () => {
     reconnectTimeout = null;
   }
   
-  // Start periodic cleanup with a longer interval
-  setInterval(() => {
-    cleanupExpiredInvites();
-  }, 60 * 60 * 1000); // 60 minutes
+  // Initialize invite role service
+  initInviteRoleService(client);
+  
+  // Initialize temp VC service
+  const tempVCResult = await initTempVCService(client);
+  if (!tempVCResult.ok) {
+    console.error('[INIT] Failed to initialize temp VC service:', tempVCResult.error);
+  }
+  
+  // Start periodic cleanup of temp VCs (runs every 30 minutes)
+  setInterval(async () => {
+    try {
+      const result = await sweepTempRooms();
+      if (result.ok && result.cleaned > 0) {
+        console.log(`[CLEANUP] Cleaned up ${result.cleaned} temp VCs`);
+      }
+    } catch (error) {
+      console.error('[CLEANUP] Error during temp VC cleanup:', error);
+    }
+  }, 30 * 60 * 1000); // 30 minutes
+});
+
+client.on('shardReady', (id) => {
+  console.log(`[SHARD] Shard ${id} ready`);
+});
+
+client.on('shardResume', (id, replayed) => {
+  console.log(`[SHARD] Shard ${id} resumed (replayed=${replayed})`);
 });
 
 // Add login timeout detection
