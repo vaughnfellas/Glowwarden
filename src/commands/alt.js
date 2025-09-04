@@ -9,7 +9,8 @@ import {
   TextInputStyle,
   ButtonBuilder,
   ButtonStyle,
-  EmbedBuilder
+  EmbedBuilder,
+  InteractionResponseType
 } from 'discord.js';
 import { CharacterDB } from '../database/characters.js';
 
@@ -255,15 +256,16 @@ export async function execute(interaction) {
     const userId = interaction.user.id;
     const interfaceData = await createCharacterInterface(userId);
     
+    // Fixed: Use flags instead of ephemeral property
     await interaction.reply({
       ...interfaceData,
-      ephemeral: true
+      flags: 1 << 6 // Ephemeral flag (64)
     });
   } catch (error) {
     console.error('Error in alt command execute:', error);
     await interaction.reply({
       content: 'An error occurred while loading your character management interface.',
-      ephemeral: true
+      flags: 1 << 6 // Ephemeral flag
     });
   }
 }
@@ -276,7 +278,7 @@ export async function handleButtonClick(interaction) {
     if (parts.length < 2) {
       return interaction.reply({
         content: 'Invalid button interaction.',
-        ephemeral: true
+        flags: 1 << 6 // Ephemeral flag
       });
     }
     const [action, userId] = parts;
@@ -284,7 +286,7 @@ export async function handleButtonClick(interaction) {
     if (userId !== interaction.user.id) {
       return interaction.reply({
         content: 'This interface is not for you.',
-        ephemeral: true
+        flags: 1 << 6 // Ephemeral flag
       });
     }
 
@@ -294,7 +296,7 @@ export async function handleButtonClick(interaction) {
         await interaction.reply({
           content: '🎭 **Add Character**\nSelect your character\'s class:',
           components: [classRow],
-          ephemeral: true
+          flags: 1 << 6 // Ephemeral flag
         });
         break;
 
@@ -303,13 +305,13 @@ export async function handleButtonClick(interaction) {
         if (!switchRow) {
           return interaction.reply({
             content: 'You have no characters to switch to.',
-            ephemeral: true
+            flags: 1 << 6 // Ephemeral flag
           });
         }
         await interaction.reply({
           content: '🔄 **Switch Main Character**\nSelect which character to make your main:',
           components: [switchRow],
-          ephemeral: true
+          flags: 1 << 6 // Ephemeral flag
         });
         break;
 
@@ -318,13 +320,13 @@ export async function handleButtonClick(interaction) {
         if (!editRow) {
           return interaction.reply({
             content: 'You have no characters to edit.',
-            ephemeral: true
+            flags: 1 << 6 // Ephemeral flag
           });
         }
         await interaction.reply({
           content: '✏️ **Edit Character**\nSelect which character to edit:',
           components: [editRow],
-          ephemeral: true
+          flags: 1 << 6 // Ephemeral flag
         });
         break;
 
@@ -333,13 +335,13 @@ export async function handleButtonClick(interaction) {
         if (!deleteRow) {
           return interaction.reply({
             content: 'You have no characters to delete.',
-            ephemeral: true
+            flags: 1 << 6 // Ephemeral flag
           });
         }
         await interaction.reply({
           content: '🗑️ **Delete Character**\nSelect which character to delete:',
           components: [deleteRow],
-          ephemeral: true
+          flags: 1 << 6 // Ephemeral flag
         });
         break;
     }
@@ -347,20 +349,40 @@ export async function handleButtonClick(interaction) {
     console.error('Error handling button click:', error);
     await interaction.reply({
       content: 'An error occurred while processing your request.',
-      ephemeral: true
+      flags: 1 << 6 // Ephemeral flag
     });
   }
 }
 
-// Handle select menu interactions
+// Handle select menu interactions - FIXED VERSION
 export async function handleSelectMenu(interaction) {
   try {
-    const [, action, , userId, characterName] = interaction.customId.split(':');
+    console.log('Select menu interaction:', interaction.customId);
+    
+    // Parse the customId based on its format
+    const customIdParts = interaction.customId.split(':');
+    const menuType = customIdParts[0]; // e.g., "alt_switch_select", "alt_class_select"
+    const userId = customIdParts[1];
+    
+    // Extract the action from the menu type
+    let action;
+    if (menuType === 'alt_class_select') {
+      action = 'class';
+    } else if (menuType === 'alt_switch_select') {
+      action = 'switch';
+    } else if (menuType === 'alt_edit_select') {
+      action = 'edit';
+    } else if (menuType === 'alt_delete_select') {
+      action = 'delete';
+    }
+    
+    console.log(`Menu type: ${menuType}, action: ${action}, userId: ${userId}`);
     
     if (userId !== interaction.user.id) {
+      console.log(`User ID mismatch: ${userId} vs ${interaction.user.id}`);
       return interaction.reply({
         content: 'This selection menu is not for you.',
-        ephemeral: true
+        flags: 1 << 6 // Ephemeral flag
       });
     }
 
@@ -423,12 +445,19 @@ export async function handleSelectMenu(interaction) {
           components: [confirmRow]
         });
         break;
+        
+      default:
+        console.log(`Unknown action: ${action}`);
+        await interaction.reply({
+          content: 'Invalid selection menu action.',
+          flags: 1 << 6 // Ephemeral flag
+        });
     }
   } catch (error) {
     console.error('Error handling select menu:', error);
     await interaction.reply({
       content: 'An error occurred while processing your selection.',
-      ephemeral: true
+      flags: 1 << 6 // Ephemeral flag
     });
   }
 }
@@ -441,7 +470,7 @@ export async function handleModalSubmit(interaction) {
     if (userId !== interaction.user.id) {
       return interaction.reply({
         content: 'This modal is not for you.',
-        ephemeral: true
+        flags: 1 << 6 // Ephemeral flag
       });
     }
 
@@ -455,7 +484,7 @@ export async function handleModalSubmit(interaction) {
       if (nameError) {
         return interaction.reply({
           content: `❌ ${nameError}`,
-          ephemeral: true
+          flags: 1 << 6 // Ephemeral flag
         });
       }
       
@@ -463,7 +492,7 @@ export async function handleModalSubmit(interaction) {
       if (exists) {
         return interaction.reply({
           content: `❌ Character **${characterName}** already exists in your roster.`,
-          ephemeral: true
+          flags: 1 << 6 // Ephemeral flag
         });
       }
       
@@ -489,7 +518,7 @@ export async function handleModalSubmit(interaction) {
       
       await interaction.reply({
         content: `✅ Added **${characterName}**${classText}${realmText}${mainText} to your roster!`,
-        ephemeral: true
+        flags: 1 << 6 // Ephemeral flag
       });
 
     } else if (action === 'edit') {
@@ -516,14 +545,14 @@ export async function handleModalSubmit(interaction) {
       
       await interaction.reply({
         content: `✅ Updated **${characterName}** successfully!`,
-        ephemeral: true
+        flags: 1 << 6 // Ephemeral flag
       });
     }
   } catch (error) {
     console.error('Error handling modal submit:', error);
     await interaction.reply({
       content: 'An error occurred while saving your character.',
-      ephemeral: true
+      flags: 1 << 6 // Ephemeral flag
     });
   }
 }
@@ -539,7 +568,7 @@ export async function handleDeleteConfirmation(interaction) {
     if (userId !== interaction.user.id) {
       return interaction.reply({
         content: 'This button is not for you.',
-        ephemeral: true
+        flags: 1 << 6 // Ephemeral flag
       });
     }
 
