@@ -18,6 +18,23 @@ import { loadEvents } from './src/events/index.js';
 import { config } from './src/config.js';
 import { tempInvites } from './src/services/temp-vc-service.js';
 import { loadCommands } from './src/commands/index.js';
+import { supabase } from './src/db.js';
+
+function setupShutdown() {
+  const shutdown = async (signal) => {
+    console.log('🔄 Shutting down Supabase connections..');
+    try {
+      await supabase.removeAllSubscriptions?.();
+    } catch (e) {
+      console.error('Supabase shutdown warning:', e?.message ?? e);
+    } finally {
+      process.exit(0);
+    }
+  };
+  process.on('SIGINT', () => shutdown('SIGINT'));
+  process.on('SIGTERM', () => shutdown('SIGTERM'));
+}
+setupShutdown();
 
 // Validate token FIRST
 const token = process.env.DISCORD_TOKEN || config.DISCORD_TOKEN;
