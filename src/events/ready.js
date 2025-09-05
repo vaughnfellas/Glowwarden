@@ -4,6 +4,7 @@ import { config } from '../config.js';
 import { getAllCommandData } from '../commands/index.js';
 import { initTempVCService, sweepTempRooms } from '../services/temp-vc-service.js';
 import { initInviteRoleService } from '../services/invite-role-service.js';
+import { scheduleNightly, pruneRoleInvites } from '../services/janitor.js';
 import { ensureDecreeExists } from '../services/oath-service.js';
 
 export const name = Events.ClientReady;
@@ -96,6 +97,14 @@ export async function execute(client) {
     } catch (cleanupError) {
       console.error('Error setting up periodic cleanup:', cleanupError);
       console.warn('Periodic cleanup disabled - manual cleanup may be required');
+    }
+
+    // Nightly janitor tasks
+    try {
+      scheduleNightly(client, [pruneRoleInvites]);
+      console.log('Nightly janitor scheduled');
+    } catch (janitorError) {
+      console.error('Error scheduling nightly janitor:', janitorError);
     }
 
     console.log('Bot fully initialized and ready!');

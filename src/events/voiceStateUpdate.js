@@ -3,6 +3,7 @@ import { Events } from 'discord.js';
 import { config } from '../config.js';
 import { ROLES, getRoleName, getDisplayRole, findBaseRole } from '../roles.js';
 import { createTempVCFor, tempOwners } from '../services/temp-vc-service.js';
+import { supabase } from '../db.js';
 
 export const name = Events.VoiceStateUpdate;
 export const once = false;
@@ -68,8 +69,23 @@ export async function execute(oldState, newState) {
       }
     }
     
+    // Delete temp VC immediately when it becomes empty
+    const oldChannel = oldState.channel;
+    if (oldChannel && tempOwners.has(oldChannel.id) && oldChannel.members.size === 0) {
+      try {
+        await oldChannel.delete('Empty temp War Chamber cleanup');
+        tempOwners.delete(oldChannel.id);
+        await supabase
+          .from('temp_voice_channels')
+          .delete()
+          .eq('channel_id', oldChannel.id);
+        console.log(`Deleted empty temp War Chamber: ${oldChannel.name}`);
+      } catch (deleteError) {
+        console.error(`Failed to delete empty War Chamber ${oldChannel.id}:`, deleteError);
+      }
+    }
+
     // Handle other voice state changes if needed
-    // This is where you could add cleanup logic for empty temp channels, etc.
     
   } catch (error) {
     console.error('Critical error in voiceStateUpdate:', error);

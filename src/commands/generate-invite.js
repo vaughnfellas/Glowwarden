@@ -137,7 +137,7 @@ export async function execute(interaction) {
   
   const maxAgeSeconds = expireDays > 0 ? expireDays * 24 * 60 * 60 : 0;
 
-  await interaction.deferReply({ ephemeral: true });
+  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
   try {
     // Create Discord invite
@@ -148,6 +148,8 @@ export async function execute(interaction) {
       unique: true,
       reason: `${roleName} invite created by ${interaction.user.tag}`,
     });
+
+    console.log(`Invite created: ${invite.code} (discord maxUses=${invite.maxUses}, maxAge=${invite.maxAge})`);
 
     let expiresAt = null;
     if (maxAgeSeconds > 0) {

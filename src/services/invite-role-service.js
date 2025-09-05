@@ -9,7 +9,7 @@ import { supabase } from '../db.js';
 
 // Grace period for invite cleanup (30 minutes)
 const CLEANUP_GRACE_MS = 30 * 60 * 1000;
-const NIGHTLY_RECON_HOUR_UTC = 3;
+
 
 // Grace deletion queue (in-memory)
 const pendingDeleteUntil = new Map(); // invite_code -> epochMillis
@@ -314,23 +314,15 @@ async function assignRoleForCode(member, code) {
   }
 }
 
-// Schedule nightly reconciliation
-function scheduleNightly(fn) {
-  const now = new Date();
-  const first = new Date(now);
-  first.setUTCHours(NIGHTLY_RECON_HOUR_UTC, 0, 0, 0);
-  if (first <= now) {
-    first.setUTCDate(first.getUTCDate() + 1);
-  }
-  
-  setTimeout(() => {
-    fn();
-    setInterval(fn, 24 * 60 * 60 * 1000);
-  }, first - now);
-}
-
 // Initialize the invite role service
+let _inviteRoleServiceInit = false;
 export function initInviteRoleService(client) {
+  if (_inviteRoleServiceInit) {
+    console.warn('initInviteRoleService called more than once; ignoring.');
+    return;
+  }
+  _inviteRoleServiceInit = true;
+
   client.on(Events.ClientReady, async () => {
     try {
       console.log('Starting invite role service initialization...');
@@ -351,39 +343,6 @@ export function initInviteRoleService(client) {
       
       console.log('Invite role service initialized');
 
-      // Schedule nightly reconciliation
-      scheduleNightly(async () => {
-        try {
-          for (const guild of client.guilds.cache.values()) {
-            const live = await refreshGuildInvites(guild);
-            const liveCodes = new Set(live.keys());
-
-            // Get DB mappings
-            const { data, error } = await supabase
-              .from('invite_mappings')
-              .select('invite_code, updated_at')
-              .eq('guild_id', guild.id);
-
-            if (error) {
-              console.warn('Nightly recon DB error:', error.message);
-              continue;
-            }
-
-            // Queue missing invites for grace deletion
-            for (const row of data || []) {
-              if (!liveCodes.has(row.invite_code)) {
-                queueGraceDelete(row.invite_code, 'nightly_recon_missing');
-              }
-            }
-          }
-
-          // Process grace deletion queue
-          await sweepGraceDeletesNow();
-          console.log('🌙 Nightly invite reconciliation complete');
-        } catch (error) {
-          console.error('Nightly invite reconciliation error:', error);
-        }
-      });
     } catch (error) {
       console.error('Failed to initialize invite role service:', error);
     }
@@ -402,16 +361,30 @@ export function initInviteRoleService(client) {
 
   // Handle invite deletion
   client.on(Events.InviteDelete, async (invite) => {
+    const code = invite?.code;
     const guild = invite.guild;
-    if (!guild) return;
 
-    const map = cache.get(guild.id) ?? new Map();
-    map.delete(invite.code);
-    cache.set(guild.id, map);
-    console.log(`Invite deleted on Discord: ${invite.code}`);
+    if (guild) {
+      const map = cache.get(guild.id) ?? new Map();
+      if (code) map.delete(code);
+      cache.set(guild.id, map);
+    }
 
-    // Queue for grace deletion instead of immediate removal
-    queueGraceDelete(invite.code, 'discord_invite_deleted');
+    if (!code) return;
+
+    const res = await InviteDB.getInviteMapping(code);
+    if (!res.ok || !res.data) return;
+
+    const row = res.data;
+    const now = Math.floor(Date.now() / 1000);
+    const exhausted = row.max_uses > 0 && row.current_uses >= row.max_uses;
+    const expired = !!row.expires_at && now >= row.expires_at;
+
+    if (exhausted || expired) {
+      console.log(`[InvDelete] ${code} removed by Discord (exhausted/expired). Leaving final removal to Janitor.`);
+    } else {
+      console.warn(`[InvDelete] ${code} deleted early by Discord; keeping mapping for nightly reconciliation`);
+    }
   });
 
   // Handle member join
