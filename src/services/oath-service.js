@@ -99,33 +99,55 @@ export function createDecreeEmbed() {
 }
 
 // Create concise onboarding tips
-export function buildOnboardingTips({ wowName, chosenClass, chosenRole, realm }) {
+// Create concise onboarding tips
+export function buildOnboardingTips({ wowName, chosenClass, chosenRole, realm, classEmoji, roleEmoji }) {
   const cls = chosenClass && chosenClass !== 'Other' ? chosenClass : '—';
   const role = chosenRole || '—';
+  const roleDisplay = chosenRole && chosenRole !== 'none' ? ` ${roleEmoji} **${chosenRole}**` : '';
 
   return [
-    `**Your Banner:** ${wowName} (${cls}${role ? ` • ${role}` : ''}) — ${realm}`,
+    `🍄 **Welcome to the Holy Gehy Empire, ${wowName}!** 🍄`,
     '',
-    '### Character Management',
-    '• Open: `/alt`',
-    '  → Use the dropdown to select a character',
-    '  → Buttons to add/remove, set main, and manage',
-    '### Voice & Temp Rooms',
-    '• Create/join a temp room: `/vc` (options appear in the menu)',
-    '• Invite a friend to your temp VC: use the in-room button (if enabled), or ask a mod',
+    'Your banner has been raised in our halls, the spores sing your name!',
     '',
-    '### Need help?',
-    '• Ping a Moderator, or type `/status` to check bot health.',
+    '**Character Management:**',
+    '• Use `/alt` to manage your roster of champions',
+    '• Your oath is recorded in the imperial archives',
+    '',
+    '**War Chambers:**',
+    '• Join the *Rent A War Chamber* voice channel to create your private sanctuary',
+    '• As a chamber host, you\'ll receive Stray Spore invites to share with outsiders',
+    '• These mystical invites vanish when your chamber closes',
+    '',
+    '**Need Guidance?**',
+    '• Summon @TheCourt for assistance with imperial matters',
+    '• Commune with the bot spirits via `/status` or `/ping`',
+    '',
+    '---',
+    '',
+    '**Your Sworn Oath:**',
+    '',
+    `*By the light of the sacred mushrooms and the rainbow spores that bind us,`,
+    `I, **${wowName}**, ${classEmoji} **${cls}**${roleDisplay} of **${realm}**,`,
+    'pledge to honor the Empire\'s tenets:*',
+    '',
+    '• To embrace all souls who seek refuge beneath our banners',
+    '• To nurture the sacred bonds of our fellowship',
+    '• To share in both triumph and tribulation as one community',
+    '• To spread joy and revelry throughout our realm',
+    '',
+    '*The Empire remembers your oath, and the spores bear witness.*'
   ].join('\n');
 }
 
+
 // Post a short welcome message
-export async function postShortPublicWelcome({ channel, member, flair, wowName, realm }) {
+export async function postShortPublicWelcome({ channel, member, wowName, realm, classEmoji }) {
   // Get the member's display role (their final role)
   const displayRole = getDisplayRole(member);
-  
+  const cls = chosenClass && chosenClass !== 'Other' ? chosenClass : '—';
   return channel.send({
-    content: `Welcome **${displayRole}** <@${member.id}> — **${wowName}** of **${realm}**!`
+    content: `Welcome **${displayRole}** <@${member.id}> — ${classEmoji} **${cls}** of **${realm}**!`
   });
 }
 // Process oath completion

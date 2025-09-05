@@ -393,16 +393,16 @@ async function handleRoleSelection(interaction) {
     
     // Create oath text
     const oathText = [
-      `I, **${userData.characterData.wowName}**, ${classEmoji} **${userData.characterData.chosenClass}**${selectedRole !== 'none' ? ` ${roleEmoji} **${selectedRole}**` : ''} of **${userData.characterData.realm}**,`,
-      'do solemnly swear to uphold the values of the Holy Gehy Empire:',
-      '',
-      '• To respect all members regardless of identity or background',
-      '• To foster a welcoming and inclusive environment',
-      '• To contribute positively to our community',
-      '• To have fun and help others do the same',
-      '',
-      'Click "Sign Oath" to complete your ceremony and gain full access to the guild.'
-    ].join('\n');
+   `By the light of the sacred mushrooms and the rainbow spores that bind us, I, **${userData.characterData.wowName}**, ${classEmoji} **${userData.characterData.chosenClass}**${selectedRole !== 'none' ? ` ${roleEmoji} **${selectedRole}**` : ''} of **${userData.characterData.realm}** pledge to honor the tenets of the Holy Gehy Empire:`,
+  '',
+  '• To embrace all souls who seek refuge beneath our banners',
+  '• To nurture the sacred bonds of our fellowship',
+  '• To share in both triumph and tribulation as one community',
+  '• To spread joy and revelry throughout our realm',
+  '',
+  '*The Empire remembers your oath, and the spores bear witness.*'
+].join('\n');
+
     
     // Create submit button
     const submitButton = new ActionRowBuilder().addComponents(
