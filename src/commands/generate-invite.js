@@ -6,7 +6,7 @@ import {
   MessageFlags,
 } from 'discord.js';
 import { isOwner } from '../utils/owner.js';
-import { config } from '../config.js';
+import { ROLES, getRoleName, getDisplayRole, findBaseRole } from '../roles.js';
 import { InviteDB } from '../database/invites.js';
 
 // In-memory map for fast lookups (loaded from DB on startup)
@@ -94,26 +94,22 @@ export async function execute(interaction) {
 
   // Get role ID based on selection
   let roleId;
-  let roleName;
   let defaultUses;
   let defaultExpireDays;
 
   switch (roleType) {
     case 'member':
-      roleId = config.ROLE_BASE_MEMBER;
-      roleName = 'Member';
+      roleId = ROLES.MEMBER;
       defaultUses = 0; // unlimited
       defaultExpireDays = 0; // never expires
       break;
     case 'officer':
-      roleId = config.ROLE_BASE_OFFICER;
-      roleName = 'Officer';
+      roleId = ROLES.OFFICER;
       defaultUses = 1;
       defaultExpireDays = 7;
       break;
     case 'veteran':
-      roleId = config.ROLE_BASE_VETERAN;
-      roleName = 'Veteran';
+      roleId = ROLES.VETERAN;
       defaultUses = 1;
       defaultExpireDays = 7;
       break;
@@ -124,12 +120,7 @@ export async function execute(interaction) {
       });
   }
 
-  if (!roleId) {
-    return interaction.reply({
-      content: `⚠️ ${roleName} role ID not configured in environment variables.`,
-      flags: MessageFlags.Ephemeral
-    });
-  }
+  const roleName = getRoleName(roleId);
 
   // Check if role exists
   const role = interaction.guild.roles.cache.get(roleId);

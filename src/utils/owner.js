@@ -1,6 +1,7 @@
 // src/utils/owner.js — Centralized ownership & permission helpers
 import { PermissionFlagsBits, MessageFlags } from 'discord.js';
 import { config } from '../config.js';
+import { ROLES, getRoleName, getDisplayRole, findBaseRole } from '../roles.js';
 import { tempOwners } from '../services/temp-vc-service.js';
 
 /**
@@ -60,15 +61,9 @@ export function isGuildMember(member) {
     const cache = member?.roles?.cache;
     if (!cache) return false;
 
-    const guildRoles = [
-      config.ROLE_BASE_MEMBER,
-      config.ROLE_BASE_OFFICER,
-      config.ROLE_BASE_VETERAN,
-    ].filter(Boolean);
-
-    const hasBase = guildRoles.some(roleId => cache.has(roleId));
-    const isStray = cache.has(config.ROLE_STRAY_SPORE_ID);
-    return hasBase && !isStray;
+    const baseRole = findBaseRole(member);
+    const isStray = cache.has(ROLES.STRAY_SPORE);
+    return Boolean(baseRole) && !isStray;
   } catch (error) {
     console.error('Error checking if member is guild member:', error);
     return false;
@@ -81,7 +76,7 @@ export function isGuildMember(member) {
  */
 export function isStraySpore(member) {
   try {
-    return Boolean(member?.roles?.cache?.has(config.ROLE_STRAY_SPORE_ID));
+    return Boolean(member?.roles?.cache?.has(ROLES.STRAY_SPORE));
   } catch (error) {
     console.error('Error checking if member is stray spore:', error);
     return false;
@@ -94,8 +89,8 @@ export function isStraySpore(member) {
  */
 export function isOfficerOrHigher(member) {
   try {
-    const cache = member?.roles?.cache;
-    return Boolean(cache?.has(config.ROLE_BASE_OFFICER) || cache?.has(config.ROLE_BASE_VETERAN));
+    const baseRole = findBaseRole(member);
+    return baseRole === ROLES.OFFICER || baseRole === ROLES.VETERAN;
   } catch (error) {
     console.error('Error checking if member is officer or higher:', error);
     return false;
@@ -201,10 +196,11 @@ export function canManageTempVC(member, channelId) {
 export function getUserPermissionLevel(member) {
   try {
     const cache = member?.roles?.cache;
-    if (cache?.has(config.ROLE_BASE_VETERAN)) return 'veteran';
-    if (cache?.has(config.ROLE_BASE_OFFICER)) return 'officer';
-    if (cache?.has(config.ROLE_BASE_MEMBER)) return 'member';
-    if (cache?.has(config.ROLE_STRAY_SPORE_ID)) return 'stray_spore';
+    if (cache?.has(ROLES.STRAY_SPORE)) return 'stray_spore';
+    const baseRole = findBaseRole(member);
+    if (baseRole === ROLES.VETERAN) return 'veteran';
+    if (baseRole === ROLES.OFFICER) return 'officer';
+    if (baseRole === ROLES.MEMBER) return 'member';
     return 'none';
   } catch (error) {
     console.error('Error getting user permission level:', error);

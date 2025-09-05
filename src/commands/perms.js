@@ -6,7 +6,7 @@ import {
   PermissionsBitField,
 } from 'discord.js';
 import { CHANNELS } from '../channels.js';
-import { config } from '../config.js';
+import { ROLES, getRoleName, getDisplayRole, findBaseRole } from '../roles.js';
 
 /**
  * DEFAULT_PERMISSIONS
@@ -20,15 +20,15 @@ const DEFAULT_PERMISSIONS = {
       description: 'Members complete final oath here',
       overwrites: [
         { id: '@everyone', deny: ['ViewChannel'] },
-        { id: config.ROLE_BASE_MEMBER,  allow: ['ViewChannel', 'SendMessages', 'ReadMessageHistory', 'UseApplicationCommands'] },
-        { id: config.ROLE_BASE_OFFICER, allow: ['ViewChannel', 'SendMessages', 'ReadMessageHistory', 'UseApplicationCommands'] },
-        { id: config.ROLE_BASE_VETERAN, allow: ['ViewChannel', 'SendMessages', 'ReadMessageHistory', 'UseApplicationCommands'] },
-        { id: config.ROLE_FINAL_MYCE,   allow: ['ViewChannel', 'SendMessages', 'ReadMessageHistory', 'UseApplicationCommands'] },
-        { id: config.ROLE_FINAL_GALLIES,allow: ['ViewChannel', 'SendMessages', 'ReadMessageHistory', 'UseApplicationCommands'] },
-        { id: config.ROLE_FINAL_GCRUS,  allow: ['ViewChannel', 'SendMessages', 'ReadMessageHistory', 'UseApplicationCommands'] },
-        { id: config.ROLE_FINAL_BBEAR,  allow: ['ViewChannel', 'SendMessages', 'ReadMessageHistory', 'UseApplicationCommands'] },
-        { id: config.ROLE_FINAL_RAPO,   allow: ['ViewChannel', 'SendMessages', 'ReadMessageHistory', 'UseApplicationCommands'] },
-        { id: config.ROLE_FINAL_RALLYLT,allow: ['ViewChannel', 'SendMessages', 'ReadMessageHistory', 'UseApplicationCommands'] },
+        { id: ROLES.MEMBER,        allow: ['ViewChannel', 'SendMessages', 'ReadMessageHistory', 'UseApplicationCommands'] },
+        { id: ROLES.OFFICER,       allow: ['ViewChannel', 'SendMessages', 'ReadMessageHistory', 'UseApplicationCommands'] },
+        { id: ROLES.VETERAN,       allow: ['ViewChannel', 'SendMessages', 'ReadMessageHistory', 'UseApplicationCommands'] },
+        { id: ROLES.MYCELIOGLITTER,allow: ['ViewChannel', 'SendMessages', 'ReadMessageHistory', 'UseApplicationCommands'] },
+        { id: ROLES.GLITTER_ALLY,  allow: ['ViewChannel', 'SendMessages', 'ReadMessageHistory', 'UseApplicationCommands'] },
+        { id: ROLES.GLITTER_CRUSADER,  allow: ['ViewChannel', 'SendMessages', 'ReadMessageHistory', 'UseApplicationCommands'] },
+        { id: ROLES.BANNER_BEARER, allow: ['ViewChannel', 'SendMessages', 'ReadMessageHistory', 'UseApplicationCommands'] },
+        { id: ROLES.RAINBOW_APOSTLE,   allow: ['ViewChannel', 'SendMessages', 'ReadMessageHistory', 'UseApplicationCommands'] },
+        { id: ROLES.RAINBOW_ALLY_LT,   allow: ['ViewChannel', 'SendMessages', 'ReadMessageHistory', 'UseApplicationCommands'] },
         { id: 'BOT', allow: ['ViewChannel', 'SendMessages', 'ManageMessages'] },
       ],
     },

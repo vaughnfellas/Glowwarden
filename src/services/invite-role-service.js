@@ -1,7 +1,7 @@
 // src/services/invite-role-service.js
 import { Events, PermissionFlagsBits, EmbedBuilder } from 'discord.js';
-import { config } from '../config.js';
 import { CHANNELS } from '../channels.js';
+import { ROLES, getRoleName, getDisplayRole, findBaseRole } from '../roles.js';
 import { handleTempVCInviteJoin, isWarChamberInvite } from './temp-vc-service.js';
 import { getDynamicInviteMap, loadInviteMappingsFromDB } from '../commands/generate-invite.js';
 import { InviteDB } from '../database/invites.js';
@@ -117,9 +117,9 @@ async function sweepGraceDeletesNow() {
 
 // Check if role is a base guild role
 function isBaseRole(roleId) {
-  return roleId === config.ROLE_BASE_MEMBER ||
-         roleId === config.ROLE_BASE_OFFICER ||
-         roleId === config.ROLE_BASE_VETERAN;
+  return roleId === ROLES.MEMBER ||
+         roleId === ROLES.OFFICER ||
+         roleId === ROLES.VETERAN;
 }
 
 // Mark an invite as successfully assigned (remove from grace queue)
@@ -153,7 +153,7 @@ async function assignRoleForCode(member, code) {
         console.log(`Processing War Chamber invite: ${code}`);
         const success = await handleTempVCInviteJoin(member, code);
         if (success) {
-          return { assigned: true, type: 'temp_vc', roleId: config.ROLE_STRAY_SPORE_ID };
+          return { assigned: true, type: 'temp_vc', roleId: ROLES.STRAY_SPORE };
         }
         return { assigned: false, type: 'temp_vc', error: 'War Chamber join failed' };
       }
@@ -256,7 +256,7 @@ async function assignRoleForCode(member, code) {
   }
 
   // 4. Fallback to default role
-  const defaultRoleId = config.ROLE_BASE_MEMBER; // Default to member role
+  const defaultRoleId = ROLES.MEMBER; // Default to member role
   if (!defaultRoleId) {
     console.log('No default role configured');
     return { assigned: false, type: 'none' };
