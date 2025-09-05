@@ -8,14 +8,21 @@ import { supabase } from '../db.js';
 export const tempOwners = new Map(); // channelId -> ownerId
 
 let client = null;
+let _tempVCServiceInit = false;
 
 export async function initTempVCService(discordClient) {
+  if (_tempVCServiceInit) {
+    console.warn('initTempVCService called more than once; ignoring.');
+    return;
+  }
+  _tempVCServiceInit = true;
+
   try {
     client = discordClient;
-    
+
     // Load existing temp VCs from database on startup
     await loadTempVCsFromDatabase();
-    
+
     console.log('Temp VC service initialized successfully');
     return { ok: true };
   } catch (error) {
