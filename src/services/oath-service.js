@@ -99,7 +99,6 @@ export function createDecreeEmbed() {
 }
 
 // Create concise onboarding tips
-// Create concise onboarding tips
 export function buildOnboardingTips({ wowName, chosenClass, chosenRole, realm, classEmoji, roleEmoji }) {
   const cls = chosenClass && chosenClass !== 'Other' ? chosenClass : '—';
   const role = chosenRole || '—';
@@ -142,7 +141,7 @@ export function buildOnboardingTips({ wowName, chosenClass, chosenRole, realm, c
 
 
 // Post a short welcome message
-export async function postShortPublicWelcome({ channel, member, wowName, realm, classEmoji }) {
+export async function postShortPublicWelcome({ channel, member, wowName, realm, classEmoji, chosenClass }) {
   // Get the member's display role (their final role)
   const displayRole = getDisplayRole(member);
   const cls = chosenClass && chosenClass !== 'Other' ? chosenClass : '—';
@@ -150,6 +149,7 @@ export async function postShortPublicWelcome({ channel, member, wowName, realm, 
     content: `Welcome **${displayRole}** <@${member.id}> — ${classEmoji} **${cls}** of **${realm}**!`
   });
 }
+
 // Process oath completion
 export async function processOathCompletion(member, flair, characterData) {
   try {
@@ -186,14 +186,7 @@ export async function processOathCompletion(member, flair, characterData) {
       }
     }
     
-    // 4. Remove base role
-    try {
-      await member.roles.remove(baseRoleId);
-      console.log(`Removed base role ${baseRoleId} from ${member.user.tag}`);
-    } catch (error) {
-      console.error(`Failed to remove base role from ${member.user.tag}:`, error);
-    }
-    // 5. Remove base role
+    // 4. Remove base role (ONLY ONCE - removed the duplicate!)
     try {
       await member.roles.remove(baseRoleId);
       console.log(`Removed base role ${baseRoleId} from ${member.user.tag}`);
@@ -201,7 +194,7 @@ export async function processOathCompletion(member, flair, characterData) {
       console.error(`Failed to remove base role from ${member.user.tag}:`, error);
     }
     
-    // 6. Register character as main
+    // 5. Register character as main
     try {
       await CharacterDB.addCharacter(
         member.user.id, 
