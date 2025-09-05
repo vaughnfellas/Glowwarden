@@ -114,43 +114,6 @@ async function sweepGraceDeletesNow() {
   }
 }
 
-// Start oath ceremony for base roles
-async function startOathCeremony(member, roleId) {
-  try {
-    const guild = member.guild;
-    const oathChannel = guild.channels.cache.get(CHANNELS.CHAMBER_OF_OATHS);
-    
-    if (!oathChannel?.isTextBased()) {
-      console.error('Chamber of Oaths channel not found or not text-based');
-      return;
-    }
-
-    const role = guild.roles.cache.get(roleId);
-    const roleName = role ? role.name : 'Member';
-
-    const embed = new EmbedBuilder()
-      .setTitle('New Member Oath Ceremony')
-      .setDescription([
-        `Welcome **${member.displayName}** to the guild!`,
-        '',
-        `**Assigned Role:** ${roleName}`,
-        `**Joined:** <t:${Math.floor(Date.now() / 1000)}:F>`,
-        '',
-        '**Oath Requirement:**',
-        'Please take your oath by responding to this message with your commitment to the guild.',
-        '',
-        'Once you take your oath, you will gain full access to the guild.'
-      ].join('\n'))
-      .setColor(0x8B4513)
-      .setTimestamp()
-      .setThumbnail(member.user.displayAvatarURL());
-
-    await oathChannel.send({ content: `${member}`, embeds: [embed] });
-    console.log(`Started oath ceremony for ${member.user.tag} with role ${roleName}`);
-  } catch (error) {
-    console.error('Failed to start oath ceremony:', error);
-  }
-}
 
 // Check if role is a base guild role
 function isBaseRole(roleId) {

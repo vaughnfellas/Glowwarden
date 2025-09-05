@@ -4,6 +4,8 @@ import { config } from '../config.js';
 import { getAllCommandData } from '../commands/index.js';
 import { initTempVCService, sweepTempRooms } from '../services/temp-vc-service.js';
 import { initInviteRoleService } from '../services/invite-role-service.js';
+import { ensureDecreeExists } from '../services/oath-service.js';
+
 
 export const name = Events.ClientReady;
 export const once = true;
@@ -80,7 +82,13 @@ export async function execute(client) {
       } catch (initialCleanupError) {
         console.error('Error in initial cleanup:', initialCleanupError);
       }
-      
+      try {
+        console.log('Ensuring Imperial Decree exists...');
+        await ensureDecreeExists(client);
+        console.log('Imperial Decree check complete');
+      } catch (decreeError) {
+        console.error('Error ensuring Imperial Decree exists:', decreeError);
+      }
       // Set up periodic sweep
       const sweepInterval = (config.SWEEP_INTERVAL_SEC || 600) * 1000;
       setInterval(async () => {

@@ -1,15 +1,23 @@
 // src/events/interactionCreate.js
-import { MessageFlags, ModalBuilder, TextInputBuilder, TextInputStyle, ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder, StringSelectMenuBuilder, StringSelectMenuOptionBuilder } from 'discord.js';
+import { MessageFlags, ModalBuilder, TextInputBuilder, TextInputStyle, ActionRowBuilder, StringSelectMenuBuilder, StringSelectMenuOptionBuilder, ButtonBuilder, ButtonStyle } from 'discord.js';
 import * as alt from '../commands/alt.js';
 import { config } from '../config.js';
 import { CHANNELS } from '../channels.js';
-import { createOathSceneText, sendOathCompletionDM, getPublicWelcomeText, createOathAcceptButton, processOathCompletion } from '../services/oath-service.js';
+import { 
+  CEREMONY_IDS, 
+  CLASS_OPTIONS, 
+  ROLE_OPTIONS,
+  buildOnboardingTips, 
+  postShortPublicWelcome, 
+  processOathCompletion,
+  sendTipsDM
+} from '../services/oath-service.js';
 
 export const name = 'interactionCreate';
 export const once = false;
 
 // Store temporary oath data while user enters character info
-const oathData = new Map(); // userId -> { flavor, guildId, channelId }
+const oathData = new Map(); // userId -> { flair, characterData }
 
 export async function execute(interaction) {
   try {
@@ -41,7 +49,7 @@ export async function execute(interaction) {
       }
     }
     
-    // Handle autocomplete (for other commands that might need it)
+    // Handle autocomplete
     else if (interaction.isAutocomplete()) {
       try {
         const command = interaction.client.commands.get(interaction.commandName);
@@ -68,22 +76,23 @@ export async function execute(interaction) {
         
         // Alt command buttons
         if (customId.startsWith('alt_')) {
-          // Handle delete confirmations
           if (customId.includes('confirm_delete') || customId.includes('cancel_delete')) {
             await alt.handleDeleteConfirmation(interaction);
-          } 
-          // Handle main action buttons
-          else {
+          } else {
             await alt.handleButtonClick(interaction);
           }
         }
-        // Flair selection buttons (from decree command)
-        else if (customId.startsWith('flair:')) {
+        // Ceremony flair buttons
+        else if (customId === CEREMONY_IDS.lgbtButton || customId === CEREMONY_IDS.allyButton) {
           await handleFlairSelection(interaction);
         }
-        // Oath acceptance button
-        else if (customId === 'accept_oath') {
-          await handleOathAcceptance(interaction);
+        // Ceremony submit button
+        else if (customId === CEREMONY_IDS.submitButton) {
+          await handleOathSubmission(interaction);
+        }
+        // DM tips button
+        else if (customId === CEREMONY_IDS.dmTipsButton) {
+          await handleDMTips(interaction);
         }
         else {
           console.warn(`Unhandled button interaction: ${customId}`);
@@ -119,9 +128,13 @@ export async function execute(interaction) {
         if (customId.startsWith('alt_')) {
           await alt.handleSelectMenu(interaction);
         }
-        // Character role selection
-        else if (customId === 'character_role_select') {
-          await handleCharacterRoleSelect(interaction);
+        // Ceremony class selection
+        else if (customId === 'ceremony_class_select') {
+          await handleClassSelection(interaction);
+        }
+        // Ceremony role selection
+        else if (customId === 'ceremony_role_select') {
+          await handleRoleSelection(interaction);
         }
         else {
           console.warn(`Unhandled select menu interaction: ${customId}`);
@@ -153,9 +166,9 @@ export async function execute(interaction) {
       try {
         const customId = interaction.customId;
         
-        // Handle oath character info modal
-        if (customId === 'oath_character_modal') {
-          await handleOathCharacterModal(interaction);
+        // Handle character info modal
+        if (customId === 'ceremony_character_modal') {
+          await handleCharacterModal(interaction);
         }
         // Handle alt command modals
         else if (customId.startsWith('alt_')) {
@@ -190,20 +203,19 @@ export async function execute(interaction) {
   }
 }
 
-// Helper function to handle flair selection
+// Handle flair selection (LGBTQIA2S+ or Ally)
 async function handleFlairSelection(interaction) {
-  const flavor = interaction.customId.replace('flair:', '');
+  const flair = interaction.customId === CEREMONY_IDS.lgbtButton ? 'lgbt' : 'ally';
   
-  // Store oath data temporarily
+  // Store oath data
   oathData.set(interaction.user.id, {
-    flavor: flavor,
-    guildId: interaction.guild.id,
-    channelId: interaction.channel.id
+    flair,
+    characterData: {}
   });
   
-  // Create modal for character information
+  // Create modal for character name and realm
   const modal = new ModalBuilder()
-    .setCustomId('oath_character_modal')
+    .setCustomId('ceremony_character_modal')
     .setTitle('Character Information');
   
   const characterNameInput = new TextInputBuilder()
@@ -215,51 +227,43 @@ async function handleFlairSelection(interaction) {
     .setMinLength(2)
     .setMaxLength(32);
   
-  const characterClassInput = new TextInputBuilder()
-    .setCustomId('character_class')
-    .setLabel('Character Class')
-    .setStyle(TextInputStyle.Short)
-    .setPlaceholder('e.g., Paladin, Mage, Hunter (or leave empty)')
-    .setRequired(false)
-    .setMaxLength(20);
-  
-  const characterRealmInput = new TextInputBuilder()
+  const realmInput = new TextInputBuilder()
     .setCustomId('character_realm')
-    .setLabel('Realm (Optional)')
+    .setLabel('Realm')
     .setStyle(TextInputStyle.Short)
     .setPlaceholder('e.g., Stormrage, Tichondrius')
-    .setRequired(false)
-    .setMaxLength(30);
+    .setRequired(true)
+    .setMinLength(2)
+    .setMaxLength(32);
   
   const nameRow = new ActionRowBuilder().addComponents(characterNameInput);
-  const classRow = new ActionRowBuilder().addComponents(characterClassInput);
-  const realmRow = new ActionRowBuilder().addComponents(characterRealmInput);
+  const realmRow = new ActionRowBuilder().addComponents(realmInput);
   
-  modal.addComponents(nameRow, classRow, realmRow);
+  modal.addComponents(nameRow, realmRow);
   
   await interaction.showModal(modal);
 }
 
-// Helper function to handle oath character modal submission
-async function handleOathCharacterModal(interaction) {
+// Handle character modal submission
+async function handleCharacterModal(interaction) {
   await interaction.deferReply({ ephemeral: true });
   
   try {
     const userId = interaction.user.id;
-    const storedData = oathData.get(userId);
+    const userData = oathData.get(userId);
     
-    if (!storedData) {
+    if (!userData) {
       await interaction.editReply({
         content: 'Session expired. Please start the oath process again.'
       });
       return;
     }
     
+    // Get character name and realm from modal
     const characterName = interaction.fields.getTextInputValue('character_name')?.trim();
-    const characterClass = interaction.fields.getTextInputValue('character_class')?.trim() || null;
-    const characterRealm = interaction.fields.getTextInputValue('character_realm')?.trim() || null;
+    const realm = interaction.fields.getTextInputValue('character_realm')?.trim();
     
-    // Validate character name
+    // Validate inputs
     if (!characterName || characterName.length < 2) {
       await interaction.editReply({
         content: 'Please provide a valid character name (at least 2 characters).'
@@ -267,62 +271,54 @@ async function handleOathCharacterModal(interaction) {
       return;
     }
     
-    // Show role selection menu
-    const roleSelect = new ActionRowBuilder().addComponents(
-      new StringSelectMenuBuilder()
-        .setCustomId('character_role_select')
-        .setPlaceholder('Select your character\'s role (optional)')
-        .addOptions([
-          new StringSelectMenuOptionBuilder()
-            .setLabel('Tank')
-            .setValue('tank')
-            .setDescription('Protector of the group')
-            .setEmoji('🛡️'),
-          new StringSelectMenuOptionBuilder()
-            .setLabel('Healer')
-            .setValue('healer')
-            .setDescription('Restorer of life')
-            .setEmoji('💚'),
-          new StringSelectMenuOptionBuilder()
-            .setLabel('DPS')
-            .setValue('dps')
-            .setDescription('Dealer of damage')
-            .setEmoji('⚔️'),
-          new StringSelectMenuOptionBuilder()
-            .setLabel('None/Skip')
-            .setValue('none')
-            .setDescription('Skip role selection')
-            .setEmoji('⏭️')
-        ])
+    if (!realm || realm.length < 2) {
+      await interaction.editReply({
+        content: 'Please provide a valid realm name (at least 2 characters).'
+      });
+      return;
+    }
+    
+    // Update stored data
+    userData.characterData.wowName = characterName;
+    userData.characterData.realm = realm;
+    oathData.set(userId, userData);
+    
+    // Create class selection menu
+    const classOptions = CLASS_OPTIONS.map(cls => 
+      new StringSelectMenuOptionBuilder()
+        .setLabel(cls.name)
+        .setValue(cls.value)
+        .setEmoji(cls.emoji)
     );
     
-    // Update stored data with character info
-    storedData.characterName = characterName;
-    storedData.characterClass = characterClass;
-    storedData.characterRealm = characterRealm;
-    oathData.set(userId, storedData);
+    const classSelect = new ActionRowBuilder().addComponents(
+      new StringSelectMenuBuilder()
+        .setCustomId('ceremony_class_select')
+        .setPlaceholder('Select your character class')
+        .addOptions(classOptions)
+    );
     
     await interaction.editReply({
-      content: `Character information received! **${characterName}**${characterClass ? ` the ${characterClass}` : ''}${characterRealm ? ` of ${characterRealm}` : ''}\n\nPlease select your character's role:`,
-      components: [roleSelect]
+      content: `Character: **${characterName}** of **${realm}**\n\nPlease select your character class:`,
+      components: [classSelect]
     });
   } catch (error) {
-    console.error('Error in handleOathCharacterModal:', error);
+    console.error('Error handling character modal:', error);
     await interaction.editReply({
       content: 'There was an error processing your character information. Please try again.'
     });
   }
 }
 
-// Helper function to handle character role selection
-async function handleCharacterRoleSelect(interaction) {
+// Handle class selection
+async function handleClassSelection(interaction) {
   await interaction.deferUpdate();
   
   try {
     const userId = interaction.user.id;
-    const storedData = oathData.get(userId);
+    const userData = oathData.get(userId);
     
-    if (!storedData) {
+    if (!userData) {
       await interaction.editReply({
         content: 'Session expired. Please start the oath process again.',
         components: []
@@ -330,35 +326,99 @@ async function handleCharacterRoleSelect(interaction) {
       return;
     }
     
-    const selectedRole = interaction.values[0] === 'none' ? null : interaction.values[0];
-    storedData.characterRole = selectedRole;
+    // Get selected class
+    const selectedClass = interaction.values[0];
+    userData.characterData.chosenClass = selectedClass;
+    oathData.set(userId, userData);
     
-    // Create the oath scene text
-    const oathText = createOathSceneText(
-      interaction.user, 
-      storedData.flavor, 
-      storedData.characterName, 
-      storedData.characterClass
+    // Create role selection menu
+    const roleOptions = ROLE_OPTIONS.map(role => 
+      new StringSelectMenuOptionBuilder()
+        .setLabel(role.name)
+        .setValue(role.value)
+        .setEmoji(role.emoji)
     );
     
-    // Create accept button
-    const acceptButton = createOathAcceptButton();
+    const roleSelect = new ActionRowBuilder().addComponents(
+      new StringSelectMenuBuilder()
+        .setCustomId('ceremony_role_select')
+        .setPlaceholder('Select your character role')
+        .addOptions(roleOptions)
+    );
     
-    // Send to the channel
-    const channel = interaction.channel;
-    if (channel) {
-      await channel.send({
-        content: oathText,
-        components: [acceptButton]
-      });
-    }
+    // Get class emoji
+    const classInfo = CLASS_OPTIONS.find(c => c.value === selectedClass);
+    const classEmoji = classInfo ? classInfo.emoji : '';
     
     await interaction.editReply({
-      content: 'Your character information has been recorded. Please accept your oath in the channel.',
-      components: []
+      content: `Character: **${userData.characterData.wowName}** of **${userData.characterData.realm}**\nClass: ${classEmoji} **${selectedClass}**\n\nPlease select your character role:`,
+      components: [roleSelect]
     });
   } catch (error) {
-    console.error('Error in handleCharacterRoleSelect:', error);
+    console.error('Error handling class selection:', error);
+    await interaction.editReply({
+      content: 'There was an error processing your class selection. Please try again.',
+      components: []
+    });
+  }
+}
+
+// Handle role selection
+async function handleRoleSelection(interaction) {
+  await interaction.deferUpdate();
+  
+  try {
+    const userId = interaction.user.id;
+    const userData = oathData.get(userId);
+    
+    if (!userData) {
+      await interaction.editReply({
+        content: 'Session expired. Please start the oath process again.',
+        components: []
+      });
+      return;
+    }
+    
+    // Get selected role
+    const selectedRole = interaction.values[0];
+    userData.characterData.chosenRole = selectedRole === 'none' ? null : selectedRole;
+    oathData.set(userId, userData);
+    
+    // Get class and role emojis
+    const classInfo = CLASS_OPTIONS.find(c => c.value === userData.characterData.chosenClass);
+    const classEmoji = classInfo ? classInfo.emoji : '';
+    
+    const roleInfo = ROLE_OPTIONS.find(r => r.value === selectedRole);
+    const roleEmoji = roleInfo ? roleInfo.emoji : '';
+    
+    // Create oath text
+    const oathText = [
+      `I, **${userData.characterData.wowName}**, ${classEmoji} **${userData.characterData.chosenClass}**${selectedRole !== 'none' ? ` ${roleEmoji} **${selectedRole}**` : ''} of **${userData.characterData.realm}**,`,
+      'do solemnly swear to uphold the values of the Holy Gehy Empire:',
+      '',
+      '• To respect all members regardless of identity or background',
+      '• To foster a welcoming and inclusive environment',
+      '• To contribute positively to our community',
+      '• To have fun and help others do the same',
+      '',
+      'Click "Sign Oath" to complete your ceremony and gain full access to the guild.'
+    ].join('\n');
+    
+    // Create submit button
+    const submitButton = new ActionRowBuilder().addComponents(
+      new ButtonBuilder()
+        .setCustomId(CEREMONY_IDS.submitButton)
+        .setLabel('Sign Oath')
+        .setStyle(ButtonStyle.Success)
+        .setEmoji('📜')
+    );
+    
+    await interaction.editReply({
+      content: oathText,
+      components: [submitButton]
+    });
+  } catch (error) {
+    console.error('Error handling role selection:', error);
     await interaction.editReply({
       content: 'There was an error processing your role selection. Please try again.',
       components: []
@@ -366,17 +426,18 @@ async function handleCharacterRoleSelect(interaction) {
   }
 }
 
-// Helper function to handle oath acceptance
-async function handleOathAcceptance(interaction) {
-  await interaction.deferReply({ ephemeral: true });
+// Handle oath submission
+async function handleOathSubmission(interaction) {
+  await interaction.deferUpdate();
   
   try {
     const userId = interaction.user.id;
-    const storedData = oathData.get(userId);
+    const userData = oathData.get(userId);
     
-    if (!storedData) {
+    if (!userData) {
       await interaction.editReply({
-        content: 'Session expired. Please start the oath process again.'
+        content: 'Session expired. Please start the oath process again.',
+        components: []
       });
       return;
     }
@@ -384,41 +445,89 @@ async function handleOathAcceptance(interaction) {
     // Process oath completion
     const result = await processOathCompletion(
       interaction.member,
-      storedData.flavor,
-      storedData.characterName,
-      storedData.characterClass,
-      storedData.characterRealm,
-      storedData.characterRole
+      userData.flair,
+      userData.characterData
     );
     
     if (!result.success) {
       await interaction.editReply({
-        content: `Failed to complete oath: ${result.error || 'Unknown error'}`
+        content: `Failed to complete oath: ${result.error || 'Unknown error'}`,
+        components: []
       });
       return;
     }
     
-    // Send public welcome message
-    const welcomeText = getPublicWelcomeText(
-      interaction.user,
-      storedData.characterName,
-      storedData.characterClass,
-      storedData.flavor
-    );
+    // Post short public welcome
+    const channel = interaction.client.channels.cache.get(CHANNELS.CHAMBER_OF_OATHS);
+    if (channel?.isTextBased()) {
+      await postShortPublicWelcome({
+        channel,
+        member: interaction.member,
+        flair: userData.flair,
+        wowName: userData.characterData.wowName,
+        realm: userData.characterData.realm
+      });
+    }
     
-    await interaction.channel.send(welcomeText);
+    // Create tips with DM button
+    const tips = buildOnboardingTips(userData.characterData);
+    
+    const dmButton = new ActionRowBuilder().addComponents(
+      new ButtonBuilder()
+        .setCustomId(CEREMONY_IDS.dmTipsButton)
+        .setLabel('Send this to my DMs')
+        .setStyle(ButtonStyle.Secondary)
+        .setEmoji('📨')
+    );
     
     // Clean up stored data
     oathData.delete(userId);
     
     await interaction.editReply({
-      content: 'Your oath has been completed successfully! Welcome to the Empire. Check your DMs for more information.'
+      content: `✅ **Oath Completed!**\n\nWelcome to the Holy Gehy Empire, ${interaction.member.displayName}!\n\n${tips}`,
+      components: [dmButton]
     });
-    
   } catch (error) {
-    console.error('Error in handleOathAcceptance:', error);
+    console.error('Error handling oath submission:', error);
     await interaction.editReply({
-      content: 'There was an error processing your oath acceptance. Please try again or contact an administrator.'
+      content: 'There was an error processing your oath. Please try again or contact an administrator.',
+      components: []
+    });
+  }
+}
+
+// Handle DM tips button
+async function handleDMTips(interaction) {
+  await interaction.deferUpdate();
+  
+  try {
+    // Get tips from previous message
+    const message = interaction.message;
+    const content = message.content;
+    
+    // Extract tips (everything after the welcome line)
+    const tipsStart = content.indexOf('✅ **Oath Completed!**');
+    const tips = tipsStart >= 0 ? content.substring(tipsStart) : content;
+    
+    // Send tips via DM
+    const success = await sendTipsDM(interaction.user, tips);
+    
+    if (success) {
+      await interaction.followUp({
+        content: 'Tips sent to your DMs!',
+        flags: MessageFlags.Ephemeral
+      });
+    } else {
+      await interaction.followUp({
+        content: 'Failed to send tips to your DMs. Please make sure you have DMs enabled for this server.',
+        flags: MessageFlags.Ephemeral
+      });
+    }
+  } catch (error) {
+    console.error('Error handling DM tips:', error);
+    await interaction.followUp({
+      content: 'There was an error sending tips to your DMs.',
+      flags: MessageFlags.Ephemeral
     });
   }
 }
