@@ -3,6 +3,7 @@ import { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, MessageFlag
 import { CHANNELS } from '../channels.js';
 import { config } from '../config.js';
 import { CharacterDB } from '../database/characters.js';
+import { ROLES, ROLE_MAPPINGS, getFinalRoleId, getFlairRoleId, getDisplayRole } from '../roles.js';
 
 // IDs for ceremony interactions
 export const CEREMONY_IDS = {
@@ -113,12 +114,13 @@ export function buildOnboardingTips({ wowName, chosenClass, chosenRole, realm })
 
 // Post a short welcome message
 export async function postShortPublicWelcome({ channel, member, flair, wowName, realm }) {
-  const flairText = flair === 'lgbt' ? 'LGBTQIA2S+' : 'Ally';
+  // Get the member's display role (their final role)
+  const displayRole = getDisplayRole(member);
+  
   return channel.send({
-    content: `Welcome <@${member.id}> — ${flairText} • **${wowName}** of **${realm}**!`
+    content: `Welcome **${displayRole}** <@${member.id}> — **${wowName}** of **${realm}**!`
   });
 }
-
 // Process oath completion
 export async function processOathCompletion(member, flair, characterData) {
   try {
@@ -126,34 +128,26 @@ export async function processOathCompletion(member, flair, characterData) {
     const { wowName, chosenClass, chosenRole, realm } = characterData;
     
     // 1. Find the user's base role
-    let baseRoleId = null;
-    for (const roleId of [config.ROLE_BASE_MEMBER, config.ROLE_BASE_OFFICER, config.ROLE_BASE_VETERAN]) {
-      if (member.roles.cache.has(roleId)) {
-        baseRoleId = roleId;
-        break;
-      }
-    }
+    const baseRoleId = findBaseRole(member);
     
     if (!baseRoleId) {
       console.error(`No base role found for ${member.user.tag}`);
       return { success: false, error: 'No base role found' };
     }
     
-    // 2. Get role info based on flair
-    const roleInfo = getRoleInfo(flair);
-    
-    // 3. Add flair role
-    if (roleInfo.flairRoleId) {
+    // 2. Add flair role
+    const flairRoleId = getFlairRoleId(flair);
+    if (flairRoleId) {
       try {
-        await member.roles.add(roleInfo.flairRoleId);
-        console.log(`Added flair role ${roleInfo.flairRoleId} to ${member.user.tag}`);
+        await member.roles.add(flairRoleId);
+        console.log(`Added flair role ${flairRoleId} to ${member.user.tag}`);
       } catch (error) {
         console.error(`Failed to add flair role to ${member.user.tag}:`, error);
       }
     }
     
-    // 4. Add final role based on base role + flair
-    const finalRoleId = roleInfo.finalRoleMap[baseRoleId];
+    // 3. Add final role based on base role + flair
+    const finalRoleId = getFinalRoleId(baseRoleId, flair);
     if (finalRoleId) {
       try {
         await member.roles.add(finalRoleId);
@@ -163,6 +157,13 @@ export async function processOathCompletion(member, flair, characterData) {
       }
     }
     
+    // 4. Remove base role
+    try {
+      await member.roles.remove(baseRoleId);
+      console.log(`Removed base role ${baseRoleId} from ${member.user.tag}`);
+    } catch (error) {
+      console.error(`Failed to remove base role from ${member.user.tag}:`, error);
+    }
     // 5. Remove base role
     try {
       await member.roles.remove(baseRoleId);

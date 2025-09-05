@@ -1,6 +1,7 @@
 // src/config.js
 // ESM-friendly config loader with env normalization + validation
 import 'dotenv/config';
+import { ROLES, ROLE_COMPATIBILITY } from './roles.js';
 
 const bool = (v, d = false) => {
   if (v == null) return d;
@@ -10,7 +11,8 @@ const bool = (v, d = false) => {
 const num = (v, d) => (v == null || v === '' || Number.isNaN(Number(v)) ? d : Number(v));
 const list = (v) => (v ? String(v).split(/[,\s]+/).filter(Boolean) : []);
 
-export const config = {
+// Base config with environment variables
+const baseConfig = {
   // Core Discord
   CLIENT_ID: process.env.CLIENT_ID,
   BOT_USER_ID: process.env.BOT_USER_ID,
@@ -66,6 +68,12 @@ export const config = {
   DATABASE_URL: process.env.DATABASE_URL,
 };
 
+// Merge with role compatibility layer for backward compatibility
+export const config = {
+  ...baseConfig,
+  ...ROLE_COMPATIBILITY
+};
+
 // Required environment variables for core functionality
 const REQUIRED = [
   'DISCORD_TOKEN',
@@ -73,8 +81,6 @@ const REQUIRED = [
   'GUILD_ID',
   'RENT_WAR_CHAMBER_VC_ID',
   'BATTLEFRONT_CATEGORY_ID',
-  'ROLE_STRAY_SPORE_ID',
-  'ROLE_HOST_ID',
   'SUPABASE_URL',           // Required for database
   'SUPABASE_SERVICE_KEY',   // Required for database
 ];
