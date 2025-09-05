@@ -3,7 +3,14 @@ import { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, MessageFlag
 import { CHANNELS } from '../channels.js';
 import { config } from '../config.js';
 import { CharacterDB } from '../database/characters.js';
-import { ROLES, ROLE_MAPPINGS, getFinalRoleId, getFlairRoleId, getDisplayRole } from '../roles.js';
+import {
+  ROLES,
+  getRoleName,
+  getDisplayRole,
+  findBaseRole,
+  getFinalRoleId,
+  getFlairRoleId,
+} from '../roles.js';
 
 // IDs for ceremony interactions
 export const CEREMONY_IDS = {
@@ -38,22 +45,22 @@ export const ROLE_OPTIONS = [
 // Get role information based on flair
 function getRoleInfo(flavor) {
   return {
-    'lgbt': {
-      flairRoleId: config.ROLE_LGBTQ,
+    lgbt: {
+      flairRoleId: ROLES.LGBTQIA2S,
       finalRoleMap: {
-        [config.ROLE_BASE_MEMBER]: config.ROLE_FINAL_MYCE,
-        [config.ROLE_BASE_OFFICER]: config.ROLE_FINAL_GCRUS,
-        [config.ROLE_BASE_VETERAN]: config.ROLE_FINAL_RAPO
-      }
+        [ROLES.MEMBER]: ROLES.MYCELIOGLITTER,
+        [ROLES.OFFICER]: ROLES.GLITTER_CRUSADER,
+        [ROLES.VETERAN]: ROLES.RAINBOW_APOSTLE,
+      },
     },
-    'ally': {
-      flairRoleId: config.ROLE_ALLY,
+    ally: {
+      flairRoleId: ROLES.ALLY,
       finalRoleMap: {
-        [config.ROLE_BASE_MEMBER]: config.ROLE_FINAL_GALLIES,
-        [config.ROLE_BASE_OFFICER]: config.ROLE_FINAL_BBEAR,
-        [config.ROLE_BASE_VETERAN]: config.ROLE_FINAL_RALLYLT
-      }
-    }
+        [ROLES.MEMBER]: ROLES.GLITTER_ALLY,
+        [ROLES.OFFICER]: ROLES.BANNER_BEARER,
+        [ROLES.VETERAN]: ROLES.RAINBOW_ALLY_LT,
+      },
+    },
   }[flavor] || { flairRoleId: null, finalRoleMap: {} };
 }
 

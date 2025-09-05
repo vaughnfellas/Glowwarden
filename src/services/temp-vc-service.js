@@ -1,6 +1,7 @@
 // src/services/temp-vc-service.js
 import { ChannelType, PermissionFlagsBits, EmbedBuilder } from 'discord.js';
 import { config } from '../config.js';
+import { ROLES, getRoleName, getDisplayRole, findBaseRole } from '../roles.js';
 import { supabase } from '../db.js';
 
 // In-memory storage for temp VC owners
@@ -114,7 +115,7 @@ export async function createTempVCFor(member) {
           ],
         },
         // Allow guild members to connect (not Stray Spores)
-        ...[config.ROLE_BASE_MEMBER, config.ROLE_BASE_OFFICER, config.ROLE_BASE_VETERAN]
+        ...[ROLES.MEMBER, ROLES.OFFICER, ROLES.VETERAN]
           .filter(roleId => roleId)
           .map(roleId => ({
             id: roleId,
@@ -271,7 +272,7 @@ export async function handleTempVCInviteJoin(member, inviteCode) {
     }
 
     // Assign Stray Spore role
-    const straySporeRole = guild.roles.cache.get(config.ROLE_STRAY_SPORE_ID);
+    const straySporeRole = guild.roles.cache.get(ROLES.STRAY_SPORE);
     if (straySporeRole) {
       try {
         await member.roles.add(straySporeRole);

@@ -1,6 +1,7 @@
 // src/events/voiceStateUpdate.js
 import { Events } from 'discord.js';
 import { config } from '../config.js';
+import { ROLES, getRoleName, getDisplayRole, findBaseRole } from '../roles.js';
 import { createTempVCFor, tempOwners } from '../services/temp-vc-service.js';
 
 export const name = Events.VoiceStateUpdate;
@@ -19,7 +20,7 @@ export async function execute(oldState, newState) {
         console.log(`${newState.member.user.tag} joined "Rent A War Chamber" lobby`);
 
         // FM = NOT Stray Spore
-        if (!newState.member.roles.cache.has(config.ROLE_STRAY_SPORE_ID)) {
+        if (!newState.member.roles.cache.has(ROLES.STRAY_SPORE)) {
           // Check for existing chamber
           let existingChannelId = null;
           for (const [channelId, ownerId] of tempOwners.entries()) {
