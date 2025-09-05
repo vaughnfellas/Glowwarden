@@ -1,4 +1,4 @@
-// commands/alt.js - Unified character management interface
+// commands/alt.js - Streamlined character management interface
 import { 
   SlashCommandBuilder, 
   ActionRowBuilder, 
@@ -13,10 +13,10 @@ import {
 } from 'discord.js';
 import { CharacterDB } from '../database/characters.js';
 
-// Class options for WoW
+// Classic WoW classes only
 const CLASS_OPTIONS = [
-  { name: 'Druid', value: 'Druid', emoji: '🻾' },
-  { name: 'Hunter', value: 'Hunter', emoji: '🹹' },
+  { name: 'Druid', value: 'Druid', emoji: '🻃' },
+  { name: 'Hunter', value: 'Hunter', emoji: '🏹' },
   { name: 'Mage', value: 'Mage', emoji: '🔮' },
   { name: 'Paladin', value: 'Paladin', emoji: '🛡️' },
   { name: 'Priest', value: 'Priest', emoji: '✨' },
@@ -29,7 +29,7 @@ const CLASS_OPTIONS = [
 
 export const data = new SlashCommandBuilder()
   .setName('alt')
-  .setDescription('Manage your character roster');
+  .setDescription('Manage your character roster with a simple interface');
 
 // Utility function to validate character name
 function validateCharacterName(name) {
@@ -42,15 +42,21 @@ function validateCharacterName(name) {
     return 'Character name must be between 2 and 32 characters';
   }
   
-  if (!/^[a-zA-Z0-9àáâãäåæçèéêëìíîïñòóôõöùúûüýÿ'-]+$/.test(trimmed)) {
+  if (!/^[a-zA-ZÀ-ÿ0-9'-]+$/.test(trimmed)) {
     return 'Character name contains invalid characters';
   }
   
   return null;
 }
 
-// Create the main character management interface
-async function createCharacterInterface(userId) {
+// Get emoji for class
+function getClassEmoji(className) {
+  const classOption = CLASS_OPTIONS.find(opt => opt.value === className);
+  return classOption ? classOption.emoji : '❓';
+}
+
+// Create the main character interface with list + action buttons
+async function createCharacterInterface(userId, selectedCharName = null) {
   if (!userId) {
     throw new Error('User ID is required');
   }
@@ -61,134 +67,107 @@ async function createCharacterInterface(userId) {
     const embed = new EmbedBuilder()
       .setTitle('🎭 Character Management')
       .setColor(0x8B4513)
-      .setDescription(characters.length === 0 
-        ? 'You have no characters registered. Click "Add Character" to get started!'
-        : `You have ${characters.length} character(s) registered.`
-      )
       .setTimestamp();
 
-    // Add character fields
-    if (characters.length > 0) {
-      for (const char of characters) {
-        const mainTag = char.isMain ? '👑 **MAIN**' : '';
-        const classText = char.class ? `**Class:** ${char.class}` : '';
-        const realmText = char.realm ? `**Realm:** ${char.realm}` : '';
-        const createdText = `**Added:** <t:${Math.floor(new Date(char.createdAt).getTime() / 1000)}:R>`;
-        
-        const details = [mainTag, classText, realmText, createdText].filter(Boolean).join('\n');
-        
-        embed.addFields({
-          name: char.name,
-          value: details,
-          inline: true
-        });
+    if (characters.length === 0) {
+      embed.setDescription('You have no characters registered yet.\nClick "Add Character" below to get started!');
+      
+      // Only show Add button when no characters
+      const actionRow = new ActionRowBuilder().addComponents(
+        new ButtonBuilder()
+          .setCustomId(`alt_add:${userId}`)
+          .setLabel('Add Character')
+          .setStyle(ButtonStyle.Success)
+          .setEmoji('➕')
+      );
+
+      return { embeds: [embed], components: [actionRow] };
+    }
+
+    // Show current main
+    const currentMain = characters.find(c => c.isMain);
+    if (currentMain) {
+      embed.addFields({
+        name: '👑 Main Character',
+        value: `**${currentMain.name}**${currentMain.class ? ` (${currentMain.class})` : ''}${currentMain.realm ? ` - ${currentMain.realm}` : ''}`,
+        inline: false
+      });
+    }
+
+    // Add all characters to the embed
+    const charList = characters.map(char => {
+      const classEmoji = getClassEmoji(char.class);
+      const mainTag = char.isMain ? ' 👑' : '';
+      return `${classEmoji} **${char.name}**${char.class ? ` (${char.class})` : ''}${char.realm ? ` - ${char.realm}` : ''}${mainTag}`;
+    }).join('\n');
+    
+    embed.addFields({
+      name: '📜 Your Characters',
+      value: charList || 'No characters found',
+      inline: false
+    });
+
+    // Create character selection dropdown
+    const options = characters.map(char => {
+      const classEmoji = getClassEmoji(char.class);
+      return new StringSelectMenuOptionBuilder()
+        .setLabel(char.name)
+        .setValue(char.name)
+        .setDescription(`${char.class || 'No class'}${char.realm ? ` • ${char.realm}` : ''}${char.isMain ? ' • MAIN' : ''}`)
+        .setEmoji(classEmoji);
+    });
+
+    // Set the placeholder to show selected character if one is selected
+    let placeholder = 'Select a character to manage...';
+    if (selectedCharName) {
+      const selectedChar = characters.find(c => c.name === selectedCharName);
+      if (selectedChar) {
+        placeholder = `Selected: ${selectedChar.name}`;
       }
     }
 
-    // Create action buttons
-    const buttons = new ActionRowBuilder();
-    
-    // Add Character button (always available)
-    buttons.addComponents(
+    const selectMenu = new StringSelectMenuBuilder()
+      .setCustomId(`alt_character_select:${userId}`)
+      .setPlaceholder(placeholder)
+      .addOptions(options);
+
+    const selectRow = new ActionRowBuilder().addComponents(selectMenu);
+
+    // Action buttons row
+    const actionRow = new ActionRowBuilder().addComponents(
       new ButtonBuilder()
         .setCustomId(`alt_add:${userId}`)
         .setLabel('Add Character')
         .setStyle(ButtonStyle.Success)
-        .setEmoji('➕')
+        .setEmoji('➕'),
+      new ButtonBuilder()
+        .setCustomId(`alt_switch:${userId}`)
+        .setLabel('Switch Active')
+        .setStyle(ButtonStyle.Primary)
+        .setEmoji('🔄'),
+      new ButtonBuilder()
+        .setCustomId(`alt_delete:${userId}`)
+        .setLabel('Delete Character')
+        .setStyle(ButtonStyle.Danger)
+        .setEmoji('🗑️')
     );
 
-    // Only show other buttons if characters exist
-    if (characters.length > 0) {
-      buttons.addComponents(
-        new ButtonBuilder()
-          .setCustomId(`alt_switch:${userId}`)
-          .setLabel('Switch Main')
-          .setStyle(ButtonStyle.Primary)
-          .setEmoji('🔄'),
-        new ButtonBuilder()
-          .setCustomId(`alt_edit:${userId}`)
-          .setLabel('Edit Character')
-          .setStyle(ButtonStyle.Secondary)
-          .setEmoji('✏️'),
-        new ButtonBuilder()
-          .setCustomId(`alt_delete:${userId}`)
-          .setLabel('Delete Character')
-          .setStyle(ButtonStyle.Danger)
-          .setEmoji('🗑️')
-      );
-    }
+    embed.setDescription(`Select a character from the dropdown, then use the buttons below to manage them.\n\n**Total Characters:** ${characters.length}`);
 
-    return { embeds: [embed], components: [buttons] };
+    return { embeds: [embed], components: [selectRow, actionRow] };
   } catch (error) {
     console.error('Error creating character interface:', error);
     throw error;
   }
 }
 
-// Create character selection dropdown
-async function createCharacterSelectionMenu(userId, action) {
-  if (!userId || !action) {
-    throw new Error('userId and action are required');
-  }
-
-  try {
-    const characters = await CharacterDB.getCharacters(userId);
-    
-    if (characters.length === 0) {
-      return null;
-    }
-
-    const options = characters.slice(0, 25).map(char =>
-      new StringSelectMenuOptionBuilder()
-        .setLabel(`${char.name}${char.isMain ? ' [MAIN]' : ''}`)
-        .setValue(char.name)
-        .setDescription(`${char.class || 'No class'}${char.realm ? ` • ${char.realm}` : ''}`)
-    );
-
-    const select = new StringSelectMenuBuilder()
-      .setCustomId(`alt_${action}_select:${userId}`)
-      .setPlaceholder(`Select character to ${action}`)
-      .addOptions(options);
-
-    return new ActionRowBuilder().addComponents(select);
-  } catch (error) {
-    console.error(`Error creating ${action} selection menu:`, error);
-    return null;
-  }
-}
-
-// Create class selection dropdown
-function createClassSelectionMenu(userId, characterName = '') {
-  if (!userId) {
-    throw new Error('userId is required');
-  }
-
-  const options = CLASS_OPTIONS.map(classOption => 
-    new StringSelectMenuOptionBuilder()
-      .setLabel(classOption.name)
-      .setValue(classOption.value)
-      .setEmoji(classOption.emoji)
-  );
-
-  const select = new StringSelectMenuBuilder()
-    .setCustomId(`alt_class_select:${userId}:${characterName}`)
-    .setPlaceholder('Select character class')
-    .addOptions(options);
-
-  return new ActionRowBuilder().addComponents(select);
-}
-
 // Create add character modal
-function createAddCharacterModal(selectedClass, userId) {
-  if (!selectedClass || !userId) {
-    throw new Error('selectedClass and userId are required');
-  }
-
+function createAddCharacterModal(userId) {
   const modal = new ModalBuilder()
-    .setCustomId(`alt_add_modal:${userId}:${selectedClass}`)
-    .setTitle('Add New Character');
+    .setCustomId(`alt_add_modal:${userId}`)
+    .setTitle('➕ Add New Character');
 
-  const characterInput = new TextInputBuilder()
+  const nameInput = new TextInputBuilder()
     .setCustomId('character_name')
     .setLabel('Character Name')
     .setStyle(TextInputStyle.Short)
@@ -196,6 +175,14 @@ function createAddCharacterModal(selectedClass, userId) {
     .setRequired(true)
     .setMinLength(2)
     .setMaxLength(32);
+
+  const classInput = new TextInputBuilder()
+    .setCustomId('character_class')
+    .setLabel('Character Class')
+    .setStyle(TextInputStyle.Short)
+    .setPlaceholder('e.g., Paladin, Mage, Hunter (or leave empty)')
+    .setRequired(false)
+    .setMaxLength(20);
 
   const realmInput = new TextInputBuilder()
     .setCustomId('character_realm')
@@ -205,71 +192,32 @@ function createAddCharacterModal(selectedClass, userId) {
     .setRequired(false)
     .setMaxLength(30);
 
-  const isMainInput = new TextInputBuilder()
-    .setCustomId('is_main')
-    .setLabel('Set as Main Character? (yes/no)')
-    .setStyle(TextInputStyle.Short)
-    .setPlaceholder('yes or no')
-    .setRequired(true)
-    .setValue('no')
-    .setMaxLength(3);
-
   modal.addComponents(
-    new ActionRowBuilder().addComponents(characterInput),
-    new ActionRowBuilder().addComponents(realmInput),
-    new ActionRowBuilder().addComponents(isMainInput)
-  );
-
-  return modal;
-}
-
-// Create edit character modal
-function createEditCharacterModal(character, userId) {
-  if (!character || !userId) {
-    throw new Error('character and userId are required');
-  }
-
-  const modal = new ModalBuilder()
-    .setCustomId(`alt_edit_modal:${userId}:${character.name}`)
-    .setTitle(`Edit ${character.name}`);
-
-  const classInput = new TextInputBuilder()
-    .setCustomId('character_class')
-    .setLabel('Character Class')
-    .setStyle(TextInputStyle.Short)
-    .setPlaceholder('Enter class name or leave empty')
-    .setRequired(false)
-    .setValue(character.class || '')
-    .setMaxLength(20);
-
-  const realmInput = new TextInputBuilder()
-    .setCustomId('character_realm')
-    .setLabel('Realm')
-    .setStyle(TextInputStyle.Short)
-    .setPlaceholder('Enter realm name or leave empty')
-    .setRequired(false)
-    .setValue(character.realm || '')
-    .setMaxLength(30);
-
-  const isMainInput = new TextInputBuilder()
-    .setCustomId('is_main')
-    .setLabel('Set as Main Character? (yes/no)')
-    .setStyle(TextInputStyle.Short)
-    .setPlaceholder('yes or no')
-    .setRequired(true)
-    .setValue(character.isMain ? 'yes' : 'no')
-    .setMaxLength(3);
-
-  modal.addComponents(
+    new ActionRowBuilder().addComponents(nameInput),
     new ActionRowBuilder().addComponents(classInput),
-    new ActionRowBuilder().addComponents(realmInput),
-    new ActionRowBuilder().addComponents(isMainInput)
+    new ActionRowBuilder().addComponents(realmInput)
   );
 
   return modal;
 }
 
-// Safely set nickname with proper error handling
+// Create make main character buttons
+function createMakeMainButton(userId, characterName) {
+  return new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId(`alt_make_main:${userId}:${characterName}`)
+      .setLabel('Make This My Main')
+      .setStyle(ButtonStyle.Primary)
+      .setEmoji('👑'),
+    new ButtonBuilder()
+      .setCustomId(`alt_skip_main:${userId}`)
+      .setLabel('Keep as Alt')
+      .setStyle(ButtonStyle.Secondary)
+      .setEmoji('✋')
+  );
+}
+
+// Safely set nickname
 async function setMemberNickname(member, nickname) {
   if (!member || !nickname) return false;
   
@@ -297,240 +245,209 @@ export async function execute(interaction) {
     
     await interaction.reply({
       ...interfaceData,
-      flags: 1 << 6 // Ephemeral flag (64)
+      flags: 1 << 6 // Ephemeral
     });
   } catch (error) {
     console.error('Error in alt command execute:', error);
     
-    const errorResponse = {
-      content: 'An error occurred while loading your character management interface.',
-      flags: 1 << 6 // Ephemeral flag
-    };
+    await interaction.reply({
+      content: 'An error occurred while loading your character interface.',
+      flags: 1 << 6
+    });
+  }
+}
 
-    if (interaction.deferred || interaction.replied) {
-      await interaction.followUp(errorResponse);
-    } else {
-      await interaction.reply(errorResponse);
+// Store selected character for current user session
+const userSelections = new Map();
+
+// Handle select menu interactions  
+export async function handleSelectMenu(interaction) {
+  if (!interaction?.customId || !interaction?.user?.id || !interaction.values?.length) return;
+
+  try {
+    const parts = interaction.customId.split(':');
+    const [menuType, userId] = parts;
+    
+    if (userId !== interaction.user.id) {
+      return interaction.reply({
+        content: 'This selection is not for you.',
+        flags: 1 << 6
+      });
     }
+
+    if (menuType === 'alt_character_select') {
+      const selectedCharacter = interaction.values[0];
+      
+      // Store the selection for this user
+      userSelections.set(userId, selectedCharacter);
+      
+      // Get character details
+      const character = await CharacterDB.getCharacter(userId, selectedCharacter);
+      if (!character) {
+        return interaction.update({
+          content: '❌ Character not found.',
+          components: []
+        });
+      }
+
+      const classText = character.class ? ` (${character.class})` : '';
+      const realmText = character.realm ? ` - ${character.realm}` : '';
+      const mainTag = character.isMain ? ' 👑' : '';
+
+      // Create updated interface with selected character
+      const updatedInterface = await createCharacterInterface(userId, selectedCharacter);
+      
+      await interaction.update({
+        content: `✅ Selected: **${character.name}**${classText}${realmText}${mainTag}\n\nUse the buttons below to manage this character.`,
+        ...updatedInterface
+      });
+    }
+  } catch (error) {
+    console.error('Error handling select menu:', error);
+    
+    await interaction.reply({
+      content: 'An error occurred while processing your selection.',
+      flags: 1 << 6
+    });
   }
 }
 
 // Handle button clicks
 export async function handleButtonClick(interaction) {
-  if (!interaction?.customId || !interaction?.user?.id) {
-    console.error('Invalid interaction in handleButtonClick');
-    return;
-  }
+  if (!interaction?.customId || !interaction?.user?.id) return;
 
   try {
     const parts = interaction.customId.split(':');
-    if (parts.length < 2) {
-      return interaction.reply({
-        content: 'Invalid button interaction.',
-        flags: 1 << 6 // Ephemeral flag
-      });
-    }
-    
     const [action, userId] = parts;
     
     if (userId !== interaction.user.id) {
       return interaction.reply({
         content: 'This interface is not for you.',
-        flags: 1 << 6 // Ephemeral flag
+        flags: 1 << 6
       });
     }
 
     switch (action) {
       case 'alt_add':
-        const classRow = createClassSelectionMenu(userId);
-        await interaction.reply({
-          content: '🎭 **Add Character**\nSelect your character\'s class:',
-          components: [classRow],
-          flags: 1 << 6 // Ephemeral flag
-        });
+        const addModal = createAddCharacterModal(userId);
+        await interaction.showModal(addModal);
         break;
 
       case 'alt_switch':
-        const switchRow = await createCharacterSelectionMenu(userId, 'switch');
-        if (!switchRow) {
+        const selectedForSwitch = userSelections.get(userId);
+        if (!selectedForSwitch) {
           return interaction.reply({
-            content: 'You have no characters to switch to.',
-            flags: 1 << 6 // Ephemeral flag
+            content: '❌ Please select a character from the dropdown first.',
+            flags: 1 << 6
           });
         }
-        await interaction.reply({
-          content: '🔄 **Switch Main Character**\nSelect which character to make your main:',
-          components: [switchRow],
-          flags: 1 << 6 // Ephemeral flag
-        });
-        break;
 
-      case 'alt_edit':
-        const editRow = await createCharacterSelectionMenu(userId, 'edit');
-        if (!editRow) {
-          return interaction.reply({
-            content: 'You have no characters to edit.',
-            flags: 1 << 6 // Ephemeral flag
-          });
-        }
+        // Switch active character (changes nickname only)
+        const switched = await setMemberNickname(interaction.member, selectedForSwitch);
+        const switchMessage = switched 
+          ? `✅ Switched to **${selectedForSwitch}** for roleplay! 🎭\n*Your Discord nickname has been updated.*`
+          : `✅ Switched to **${selectedForSwitch}** for roleplay! 🎭\n*Note: Couldn't update nickname (no permissions).*`;
+        
         await interaction.reply({
-          content: '✏️ **Edit Character**\nSelect which character to edit:',
-          components: [editRow],
-          flags: 1 << 6 // Ephemeral flag
+          content: switchMessage,
+          flags: 1 << 6
         });
         break;
 
       case 'alt_delete':
-        const deleteRow = await createCharacterSelectionMenu(userId, 'delete');
-        if (!deleteRow) {
+        const selectedForDelete = userSelections.get(userId);
+        if (!selectedForDelete) {
           return interaction.reply({
-            content: 'You have no characters to delete.',
-            flags: 1 << 6 // Ephemeral flag
+            content: '❌ Please select a character from the dropdown first.',
+            flags: 1 << 6
           });
         }
+
+        const confirmRow = new ActionRowBuilder().addComponents(
+          new ButtonBuilder()
+            .setCustomId(`alt_confirm_delete:${userId}:${selectedForDelete}`)
+            .setLabel(`Yes, Delete ${selectedForDelete}`)
+            .setStyle(ButtonStyle.Danger)
+            .setEmoji('🗑️'),
+          new ButtonBuilder()
+            .setCustomId(`alt_cancel_delete:${userId}`)
+            .setLabel('Cancel')
+            .setStyle(ButtonStyle.Secondary)
+            .setEmoji('❌')
+        );
+
         await interaction.reply({
-          content: '🗑️ **Delete Character**\nSelect which character to delete:',
-          components: [deleteRow],
-          flags: 1 << 6 // Ephemeral flag
+          content: `⚠️ **Are you sure you want to delete ${selectedForDelete}?**\n\nThis action cannot be undone!`,
+          components: [confirmRow],
+          flags: 1 << 6
         });
         break;
 
-      default:
-        await interaction.reply({
-          content: 'Unknown button action.',
-          flags: 1 << 6 // Ephemeral flag
+      case 'alt_make_main':
+        const characterName = parts[2];
+        await CharacterDB.setMainCharacter(userId, characterName);
+        await setMemberNickname(interaction.member, characterName);
+        
+        // Show updated interface after setting main
+        const updatedMainInterface = await createCharacterInterface(userId, characterName);
+        
+        await interaction.update({
+          content: `✅ **${characterName}** is now your main character! 👑`,
+          ...updatedMainInterface
         });
+        break;
+
+      case 'alt_skip_main':
+        // Get the most recently added character
+        const characters = await CharacterDB.getCharacters(userId);
+        const newestChar = characters[characters.length - 1];
+        
+        // Show updated interface
+        const updatedInterface = await createCharacterInterface(userId, newestChar?.name);
+        
+        await interaction.update({
+          content: '✅ Character added as an alt. You can change this later!',
+          ...updatedInterface
+        });
+        break;
+
+      case 'alt_confirm_delete':
+        const charToDelete = parts[2];
+        await CharacterDB.deleteCharacter(userId, charToDelete);
+        
+        // Clear selection if we just deleted the selected character
+        if (userSelections.get(userId) === charToDelete) {
+          userSelections.delete(userId);
+        }
+        
+        // Show updated interface after deletion
+        const updatedDeleteInterface = await createCharacterInterface(userId);
+        
+        await interaction.update({
+          content: `✅ Successfully deleted **${charToDelete}**.`,
+          ...updatedDeleteInterface
+        });
+        break;
+
+      case 'alt_cancel_delete':
+        // Get current selection
+        const currentSelection = userSelections.get(userId);
+        
+        // Show updated interface
+        const cancelInterface = await createCharacterInterface(userId, currentSelection);
+        
+        await interaction.update({
+          content: '❌ Character deletion cancelled.',
+          ...cancelInterface
+        });
+        break;
     }
   } catch (error) {
     console.error('Error handling button click:', error);
     
     const errorResponse = {
       content: 'An error occurred while processing your request.',
-      flags: 1 << 6 // Ephemeral flag
-    };
-
-    if (interaction.deferred || interaction.replied) {
-      await interaction.followUp(errorResponse);
-    } else {
-      await interaction.reply(errorResponse);
-    }
-  }
-}
-
-// Handle select menu interactions
-export async function handleSelectMenu(interaction) {
-  if (!interaction?.customId || !interaction?.user?.id) {
-    console.error('Invalid interaction in handleSelectMenu');
-    return;
-  }
-
-  try {
-    console.log('Select menu interaction:', interaction.customId);
-    
-    const customIdParts = interaction.customId.split(':');
-    if (customIdParts.length < 2) {
-      return interaction.reply({
-        content: 'Invalid select menu format.',
-        flags: 1 << 6 // Ephemeral flag
-      });
-    }
-
-    const menuType = customIdParts[0];
-    const userId = customIdParts[1];
-    
-    // Extract the action from the menu type
-    let action;
-    if (menuType === 'alt_class_select') {
-      action = 'class';
-    } else if (menuType === 'alt_switch_select') {
-      action = 'switch';
-    } else if (menuType === 'alt_edit_select') {
-      action = 'edit';
-    } else if (menuType === 'alt_delete_select') {
-      action = 'delete';
-    } else {
-      return interaction.reply({
-        content: 'Unknown select menu type.',
-        flags: 1 << 6 // Ephemeral flag
-      });
-    }
-    
-    console.log(`Menu type: ${menuType}, action: ${action}, userId: ${userId}`);
-    
-    if (userId !== interaction.user.id) {
-      console.log(`User ID mismatch: ${userId} vs ${interaction.user.id}`);
-      return interaction.reply({
-        content: 'This selection menu is not for you.',
-        flags: 1 << 6 // Ephemeral flag
-      });
-    }
-
-    if (!interaction.values || interaction.values.length === 0) {
-      return interaction.reply({
-        content: 'No selection was made.',
-        flags: 1 << 6 // Ephemeral flag
-      });
-    }
-
-    switch (action) {
-      case 'class':
-        const selectedClass = interaction.values[0];
-        const modal = createAddCharacterModal(selectedClass, userId);
-        await interaction.showModal(modal);
-        break;
-
-      case 'switch':
-        const characterToSwitch = interaction.values[0];
-        await CharacterDB.setMainCharacter(userId, characterToSwitch);
-        
-        // Try to update nickname
-        await setMemberNickname(interaction.member, characterToSwitch);
-        
-        await interaction.update({
-          content: `✅ Switched to **${characterToSwitch}** as your main character!`,
-          components: []
-        });
-        break;
-
-      case 'edit':
-        const characterToEdit = await CharacterDB.getCharacter(userId, interaction.values[0]);
-        if (!characterToEdit) {
-          return interaction.update({
-            content: 'Character not found.',
-            components: []
-          });
-        }
-        
-        const editModal = createEditCharacterModal(characterToEdit, userId);
-        await interaction.showModal(editModal);
-        break;
-
-      case 'delete':
-        const characterToDelete = interaction.values[0];
-        
-        const confirmRow = new ActionRowBuilder().addComponents(
-          new ButtonBuilder()
-            .setCustomId(`alt_confirm_delete:${userId}:${characterToDelete}`)
-            .setLabel('Delete Character')
-            .setStyle(ButtonStyle.Danger),
-          new ButtonBuilder()
-            .setCustomId(`alt_cancel_delete:${userId}`)
-            .setLabel('Cancel')
-            .setStyle(ButtonStyle.Secondary)
-        );
-        
-        await interaction.update({
-          content: `⚠️ Are you sure you want to delete **${characterToDelete}**? This cannot be undone.`,
-          components: [confirmRow]
-        });
-        break;
-    }
-  } catch (error) {
-    console.error('Error handling select menu:', error);
-    
-    const errorResponse = {
-      content: 'An error occurred while processing your selection.',
-      flags: 1 << 6 // Ephemeral flag
+      flags: 1 << 6
     };
 
     if (interaction.deferred || interaction.replied) {
@@ -543,39 +460,29 @@ export async function handleSelectMenu(interaction) {
 
 // Handle modal submissions
 export async function handleModalSubmit(interaction) {
-  if (!interaction?.customId || !interaction?.user?.id || !interaction?.fields) {
-    console.error('Invalid interaction in handleModalSubmit');
-    return;
-  }
+  if (!interaction?.customId || !interaction?.user?.id) return;
 
   try {
     const parts = interaction.customId.split(':');
-    if (parts.length < 4) {
-      return interaction.reply({
-        content: 'Invalid modal format.',
-        flags: 1 << 6 // Ephemeral flag
-      });
-    }
-
-    const [, action, userId, extra] = parts;
+    const [modalType, userId] = parts;
     
     if (userId !== interaction.user.id) {
       return interaction.reply({
         content: 'This modal is not for you.',
-        flags: 1 << 6 // Ephemeral flag
+        flags: 1 << 6
       });
     }
 
-    if (action === 'add') {
-      const selectedClass = extra;
+    if (modalType === 'alt_add_modal') {
+      // Add character modal
       const characterName = interaction.fields.getTextInputValue('character_name')?.trim();
+      const characterClass = interaction.fields.getTextInputValue('character_class')?.trim() || null;
       const realm = interaction.fields.getTextInputValue('character_realm')?.trim() || null;
-      const isMainInput = interaction.fields.getTextInputValue('is_main')?.trim()?.toLowerCase();
-      
+
       if (!characterName) {
         return interaction.reply({
           content: '❌ Character name is required.',
-          flags: 1 << 6 // Ephemeral flag
+          flags: 1 << 6
         });
       }
 
@@ -583,136 +490,43 @@ export async function handleModalSubmit(interaction) {
       if (nameError) {
         return interaction.reply({
           content: `❌ ${nameError}`,
-          flags: 1 << 6 // Ephemeral flag
+          flags: 1 << 6
         });
       }
-      
+
       const exists = await CharacterDB.characterExists(userId, characterName);
       if (exists) {
         return interaction.reply({
-          content: `❌ Character **${characterName}** already exists in your roster.`,
-          flags: 1 << 6 // Ephemeral flag
+          content: `❌ Character **${characterName}** already exists.`,
+          flags: 1 << 6
         });
       }
-      
-      const isMain = ['yes', 'y', '1', 'true'].includes(isMainInput || '');
-      const charClass = selectedClass === 'none' ? null : selectedClass;
-      
-      await CharacterDB.addCharacter(userId, characterName, charClass, realm, isMain);
-      
-      if (isMain) {
-        await setMemberNickname(interaction.member, characterName);
-      }
-      
-      const mainText = isMain ? ' as your **main character**' : '';
-      const classText = charClass ? ` (${charClass})` : '';
-      const realmText = realm ? ` on ${realm}` : '';
-      
-      await interaction.reply({
-        content: `✅ Added **${characterName}**${classText}${realmText}${mainText} to your roster!`,
-        flags: 1 << 6 // Ephemeral flag
-      });
 
-    } else if (action === 'edit') {
-      const characterName = extra;
-      const newClass = interaction.fields.getTextInputValue('character_class')?.trim() || null;
-      const newRealm = interaction.fields.getTextInputValue('character_realm')?.trim() || null;
-      const isMainInput = interaction.fields.getTextInputValue('is_main')?.trim()?.toLowerCase();
-      
-      const isMain = ['yes', 'y', '1', 'true'].includes(isMainInput || '');
-      
-      // Update character
-      await CharacterDB.addCharacter(userId, characterName, newClass, newRealm, isMain);
-      
-      if (isMain) {
-        await setMemberNickname(interaction.member, characterName);
-      }
-      
+      // Add character (defaults to NOT main)
+      await CharacterDB.addCharacter(userId, characterName, characterClass, realm, false);
+
+      // Ask if they want to make it main
+      const mainButton = createMakeMainButton(userId, characterName);
+      const classText = characterClass ? ` (${characterClass})` : '';
+      const realmText = realm ? ` on ${realm}` : '';
+
       await interaction.reply({
-        content: `✅ Updated **${characterName}** successfully!`,
-        flags: 1 << 6 // Ephemeral flag
+        content: `✅ Added **${characterName}**${classText}${realmText} to your roster!\n\nWould you like to make this your main character?`,
+        components: [mainButton],
+        flags: 1 << 6
       });
     }
   } catch (error) {
     console.error('Error handling modal submit:', error);
     
-    const errorResponse = {
-      content: 'An error occurred while saving your character.',
-      flags: 1 << 6 // Ephemeral flag
-    };
-
-    if (interaction.deferred || interaction.replied) {
-      await interaction.followUp(errorResponse);
-    } else {
-      await interaction.reply(errorResponse);
-    }
+    await interaction.reply({
+      content: 'An error occurred while processing your request.',
+      flags: 1 << 6
+    });
   }
 }
 
-// Handle delete confirmation
+// Legacy function for compatibility
 export async function handleDeleteConfirmation(interaction) {
-  if (!interaction?.customId || !interaction?.user?.id) {
-    console.error('Invalid interaction in handleDeleteConfirmation');
-    return;
-  }
-
-  try {
-    const parts = interaction.customId.split(':');
-    if (parts.length < 3) {
-      return interaction.reply({
-        content: 'Invalid delete confirmation format.',
-        flags: 1 << 6 // Ephemeral flag
-      });
-    }
-
-    const action = parts[1];            // 'confirm_delete' or 'cancel_delete'
-    const userId = parts[2];
-    const characterName = parts[3];     // only present when action === 'confirm_delete'
-
-    if (userId !== interaction.user.id) {
-      return interaction.reply({
-        content: 'This button is not for you.',
-        flags: 1 << 6 // Ephemeral flag
-      });
-    }
-
-    if (action === 'confirm_delete') {
-      if (!characterName) {
-        return interaction.update({
-          content: 'Invalid character name for deletion.',
-          components: []
-        });
-      }
-
-      await CharacterDB.deleteCharacter(userId, characterName);
-      await interaction.update({
-        content: `✅ Successfully deleted **${characterName}** from your roster.`,
-        components: []
-      });
-    } else if (action === 'cancel_delete') {
-      // Close the confirmation dialog
-      await interaction.update({
-        content: '❌ Character deletion cancelled.',
-        components: []
-      });
-    } else {
-      await interaction.update({
-        content: 'Unknown delete action.',
-        components: []
-      });
-    }
-  } catch (error) {
-    console.error('Error handling delete confirmation:', error);
-    
-    const errorResponse = {
-      content: 'An error occurred while processing the deletion.',
-      components: []
-    };
-
-    if (interaction.deferred || interaction.replied) {
-      await interaction.followUp(errorResponse);
-    } else {
-      await interaction.update(errorResponse);
-    }
-  }
+  return handleButtonClick(interaction);
 }

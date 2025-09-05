@@ -17,7 +17,7 @@ export const config = {
   DISCORD_TOKEN: process.env.DISCORD_TOKEN,
   GUILD_ID: process.env.GUILD_ID,
   OWNER_IDS: list(process.env.OWNER_IDS),
-
+  ROLE_LORD_PROTECTOR_ID: process.env.ROLE_LORD_PROTECTOR_ID,
   // Channels / Categories
   LOG_CHANNEL_ID: process.env.LOG_CHANNEL_ID,
   DECREE_CHANNEL_ID: process.env.DECREE_CHANNEL_ID,

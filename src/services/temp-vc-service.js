@@ -1,18 +1,13 @@
 // src/services/temp-vc-service.js
-import { ChannelType, PermissionFlagsBits } from 'discord.js';
+import { ChannelType, PermissionFlagsBits, EmbedBuilder } from 'discord.js';
 import { config } from '../config.js';
 import { supabase } from '../db.js';
 
-// In-memory storage for temp VC owners (consider moving to database)
+// In-memory storage for temp VC owners
 export const tempOwners = new Map(); // channelId -> ownerId
 
 let client = null;
 
-/**
- * Initialize the temp VC service
- * @param {Client} discordClient 
- * @returns {Promise<{ok: boolean, error?: string}>}
- */
 export async function initTempVCService(discordClient) {
   try {
     client = discordClient;
@@ -28,9 +23,6 @@ export async function initTempVCService(discordClient) {
   }
 }
 
-/**
- * Load existing temp VCs from database
- */
 async function loadTempVCsFromDatabase() {
   try {
     const { data: tempVCs, error } = await supabase
@@ -54,10 +46,6 @@ async function loadTempVCsFromDatabase() {
   }
 }
 
-/**
- * Get temp invites from database
- * @returns {Promise<Map>}
- */
 export async function getTempInvites() {
   try {
     const { data: invites, error } = await supabase
@@ -89,11 +77,6 @@ export async function getTempInvites() {
   }
 }
 
-/**
- * Create a temporary voice channel for a member
- * @param {GuildMember} member 
- * @returns {Promise<{ok: boolean, channel?: GuildChannel, error?: string}>}
- */
 export async function createTempVCFor(member) {
   try {
     if (!client) {
@@ -132,7 +115,7 @@ export async function createTempVCFor(member) {
         },
         // Allow guild members to connect (not Stray Spores)
         ...[config.ROLE_BASE_MEMBER, config.ROLE_BASE_OFFICER, config.ROLE_BASE_VETERAN]
-          .filter(roleId => roleId) // Filter out undefined roles
+          .filter(roleId => roleId)
           .map(roleId => ({
             id: roleId,
             allow: [PermissionFlagsBits.Connect, PermissionFlagsBits.Speak, PermissionFlagsBits.UseVAD],
@@ -145,6 +128,7 @@ export async function createTempVCFor(member) {
     
     // Create 24h invite link
     let inviteCode = null;
+    let inviteUrl = null;
     try {
       const invite = await warChamber.createInvite({
         maxAge: 86400, // 24 hours
@@ -153,7 +137,8 @@ export async function createTempVCFor(member) {
       });
       
       inviteCode = invite.code;
-      console.log(`Created 24h invite for War Chamber: ${invite.url}`);
+      inviteUrl = invite.url;
+      console.log(`Created 24h invite for War Chamber: ${inviteUrl}`);
     } catch (inviteError) {
       console.warn(`Failed to create invite for War Chamber ${warChamber.name}:`, inviteError);
     }
@@ -186,10 +171,65 @@ export async function createTempVCFor(member) {
       console.log(`Created and moved ${member.user.tag} to War Chamber: ${warChamber.name}`);
     } catch (moveError) {
       console.error(`Failed to move ${member.user.tag} to new War Chamber:`, moveError);
-      // Don't return error here as channel was created successfully
     }
 
-    return { ok: true, channel: warChamber };
+    // Post invite in the channel if we created one
+    if (inviteCode && inviteUrl) {
+      try {
+        const embed = new EmbedBuilder()
+          .setTitle('War Chamber Ready!')
+          .setDescription([
+            `Welcome to your private War Chamber, ${member.displayName}!`,
+            '',
+            '**Invite Your Allies:**',
+            `Share this invite link: ${inviteUrl}`,
+            '',
+            '**Features:**',
+            '• 24-hour access for you and invited members',
+            '• You can manage permissions and kick members',
+            '• Automatically cleaned up when empty',
+            '',
+            '**Need Help?**',
+            'Use `/vc` commands to manage your War Chamber.'
+          ].join('\n'))
+          .setColor(0x8B4513)
+          .setTimestamp();
+
+        await warChamber.send({ embeds: [embed] });
+        console.log(`Posted invite info in War Chamber: ${warChamber.name}`);
+      } catch (postError) {
+        console.error(`Failed to post invite in War Chamber ${warChamber.name}:`, postError);
+      }
+    }
+
+    // Send DM to the owner
+    try {
+      const dmEmbed = new EmbedBuilder()
+        .setTitle('Your War Chamber is Ready!')
+        .setDescription([
+          `Your War Chamber **${channelName}** has been created successfully!`,
+          '',
+          inviteUrl ? `**Invite Link:** ${inviteUrl}` : '**Invite:** Failed to create invite link',
+          `**Channel:** ${warChamber}`,
+          `**Valid For:** 24 hours`,
+          '',
+          '**What you can do:**',
+          '• Invite friends using the link above',
+          '• Manage permissions for specific users',
+          '• Use `/vc` commands for additional control',
+          '',
+          '**Note:** Your War Chamber will be automatically deleted when empty or after 24 hours.',
+        ].join('\n'))
+        .setColor(0x8B4513)
+        .setTimestamp();
+
+      await member.send({ embeds: [dmEmbed] });
+      console.log(`Sent War Chamber DM to ${member.user.tag}`);
+    } catch (dmError) {
+      console.warn(`Failed to send War Chamber DM to ${member.user.tag}:`, dmError);
+    }
+
+    return { ok: true, channel: warChamber, invite: inviteUrl };
     
   } catch (error) {
     console.error('Error creating temp VC:', error);
@@ -197,17 +237,11 @@ export async function createTempVCFor(member) {
   }
 }
 
-/**
- * Handle a member joining via a temp VC invite
- * @param {GuildMember} member 
- * @param {string} inviteCode 
- * @returns {Promise<boolean>}
- */
 export async function handleTempVCInviteJoin(member, inviteCode) {
   try {
     if (!client) {
       console.error('Temp VC service not initialized');
-      return false;
+      return { ok: false, error: 'Service not initialized' };
     }
 
     // Find the channel with this invite code in database
@@ -220,7 +254,7 @@ export async function handleTempVCInviteJoin(member, inviteCode) {
 
     if (error || !tempVC) {
       console.log(`No active temp VC found for invite code: ${inviteCode}`);
-      return false;
+      return { ok: false, error: 'Temp VC not found or expired' };
     }
 
     const guild = member.guild;
@@ -233,11 +267,11 @@ export async function handleTempVCInviteJoin(member, inviteCode) {
         .delete()
         .eq('channel_id', tempVC.channel_id);
       tempOwners.delete(tempVC.channel_id);
-      return false;
+      return { ok: false, error: 'War Chamber no longer exists' };
     }
 
     // Assign Stray Spore role
-    const straySporeRole = guild.roles.cache.get(config.STRAY_SPORE_ROLE_ID);
+    const straySporeRole = guild.roles.cache.get(config.ROLE_STRAY_SPORE_ID);
     if (straySporeRole) {
       try {
         await member.roles.add(straySporeRole);
@@ -259,19 +293,14 @@ export async function handleTempVCInviteJoin(member, inviteCode) {
       console.error(`Failed to grant War Chamber access to ${member.user.tag}:`, permError);
     }
 
-    return true;
+    return { ok: true };
     
   } catch (error) {
     console.error('Error handling temp VC invite join:', error);
-    return false;
+    return { ok: false, error: error.message };
   }
 }
 
-/**
- * Check if an invite code is a temp VC invite
- * @param {string} code 
- * @returns {Promise<boolean>}
- */
 export async function isWarChamberInvite(code) {
   try {
     const { data: tempVC, error } = await supabase
@@ -288,12 +317,6 @@ export async function isWarChamberInvite(code) {
   }
 }
 
-/**
- * Grant access to a member for a specific temp VC
- * @param {GuildMember} member 
- * @param {string} channelId 
- * @returns {Promise<{success: boolean, message?: string}>}
- */
 export async function grantAccessToMember(member, channelId) {
   try {
     const channel = member.guild.channels.cache.get(channelId);
@@ -306,7 +329,6 @@ export async function grantAccessToMember(member, channelId) {
       return { success: false, message: 'This is not a temporary War Chamber' };
     }
 
-    // Grant permissions
     await channel.permissionOverwrites.create(member.id, {
       Connect: true,
       Speak: true,
@@ -322,11 +344,6 @@ export async function grantAccessToMember(member, channelId) {
   }
 }
 
-/**
- * Check if a user owns a temp VC
- * @param {string} userId 
- * @returns {string|null} channelId if found, null otherwise
- */
 export function getUserTempVC(userId) {
   try {
     for (const [channelId, ownerId] of tempOwners.entries()) {
@@ -341,10 +358,6 @@ export function getUserTempVC(userId) {
   }
 }
 
-/**
- * Clean up empty temp rooms and stale data
- * @returns {Promise<{ok: boolean, cleaned: number, error?: string}>}
- */
 export async function sweepTempRooms() {
   try {
     if (!client) {
@@ -358,7 +371,6 @@ export async function sweepTempRooms() {
       return { ok: false, error: 'Guild not found', cleaned: 0 };
     }
 
-    // Get all temp VCs from database
     const { data: tempVCs, error } = await supabase
       .from('temp_voice_channels')
       .select('*');
@@ -415,7 +427,6 @@ export async function sweepTempRooms() {
         
       } catch (channelError) {
         console.error(`Error checking temp channel ${tempVC.channel_id}:`, channelError);
-        // Remove from database and tracking if we can't access it
         await supabase
           .from('temp_voice_channels')
           .delete()
@@ -434,10 +445,6 @@ export async function sweepTempRooms() {
   }
 }
 
-/**
- * Get statistics about temp VCs
- * @returns {Promise<{totalActive: number, owners: string[], channels: Array}>}
- */
 export async function getTempVCStats() {
   try {
     if (!client) {
@@ -449,7 +456,6 @@ export async function getTempVCStats() {
       return { totalActive: 0, owners: [], channels: [] };
     }
 
-    // Get active temp VCs from database
     const { data: tempVCs, error } = await supabase
       .from('temp_voice_channels')
       .select('*')
@@ -489,11 +495,6 @@ export async function getTempVCStats() {
   }
 }
 
-/**
- * Force cleanup of a specific temp VC (admin function)
- * @param {string} channelId 
- * @returns {Promise<{ok: boolean, error?: string}>}
- */
 export async function forceCleanupTempVC(channelId) {
   try {
     if (!client) {
@@ -511,7 +512,6 @@ export async function forceCleanupTempVC(channelId) {
       await channel.delete('Force cleanup by admin');
     }
     
-    // Remove from database
     await supabase
       .from('temp_voice_channels')
       .delete()

@@ -12,7 +12,6 @@ import { checkOwnerPermission } from '../utils/owner.js';
 import { CHANNELS } from '../channels.js';
 import { config } from '../config.js';
 
-
 export const data = new SlashCommandBuilder()
   .setName('decree')
   .setDescription('Post the Imperial Decree with flair buttons')
@@ -39,7 +38,7 @@ export async function execute(interaction) {
         '• Honor the fellowship — laughter, respect, and solidarity guide our quests more than gold or gear.',
         '',
         '**Place your seal upon this decree and declare your truth:**',
-        '*When you sign below, you\'ll be prompted to enter your character name for the guild records.*',
+        '*When you sign below, you\'ll be prompted to enter your character information for the guild records.*',
       ].join('\n')
     )
     .setColor(0x8B4513)
@@ -50,5 +49,17 @@ export async function execute(interaction) {
     new ButtonBuilder().setCustomId('flair:ally').setLabel('🤝 Ally').setStyle(ButtonStyle.Secondary),
   );
 
-  await interaction.reply({ embeds: [embed], components: [row] });
+  // Send and pin the decree
+  const message = await interaction.channel.send({ embeds: [embed], components: [row] });
+  
+  try {
+    await message.pin();
+    await interaction.reply({ content: 'Imperial Decree posted and pinned!', flags: MessageFlags.Ephemeral });
+  } catch (error) {
+    console.error('Failed to pin decree:', error);
+    await interaction.reply({ 
+      content: 'Imperial Decree posted, but I couldn\'t pin it. Please pin it manually.', 
+      flags: MessageFlags.Ephemeral 
+    });
+  }
 }
