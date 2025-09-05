@@ -122,21 +122,51 @@ function isBaseRole(roleId) {
          roleId === ROLES.VETERAN;
 }
 
-// Mark an invite as successfully assigned (remove from grace queue)
+// Start the oath ceremony for a new member
+async function startOathCeremony(member, roleId) {
+  try {
+    console.log(`Starting oath ceremony for ${member.user.tag} with role ${roleId}`);
+    
+    // Get the oath channel
+    const oathChannel = member.guild.channels.cache.get(CHANNELS.CHAMBER_OF_OATHS);
+    if (!oathChannel?.isTextBased()) {
+      console.error('Oath channel not found or not text-based');
+      return false;
+    }
+    
+    // Send a DM to the user
+    try {
+      await member.send({
+        content: `Welcome to the Holy Gehy Empire, ${member.user.username}!\n\nPlease visit <#${CHANNELS.CHAMBER_OF_OATHS}> to complete your oath ceremony and claim your final role.`
+      });
+      console.log(`Sent welcome DM to ${member.user.tag}`);
+    } catch (dmError) {
+      console.warn(`Could not send DM to ${member.user.tag}:`, dmError);
+      // Continue even if DM fails - they can still see the channel mention
+    }
+    
+    // Mention the user in the oath channel
+    await oathChannel.send({
+      content: `Welcome <@${member.id}>! Please complete your oath ceremony by clicking the buttons on the pinned Imperial Decree message above.`
+    });
+    
+    console.log(`Oath ceremony started for ${member.user.tag}`);
+    return true;
+  } catch (error) {
+    console.error(`Error starting oath ceremony for ${member.user.tag}:`, error);
+    return false;
+  }
+}
+
+// Mark an invite as successfully assigned (remove from grace queue but keep the mapping)
 async function markAssigned(code) {
   if (pendingDeleteUntil.has(code)) {
     try {
-      const { error } = await supabase
-        .from('invite_mappings')
-        .delete()
-        .eq('invite_code', code);
-        
-      if (!error) {
-        pendingDeleteUntil.delete(code);
-        console.log(`Deleted invite mapping for ${code} after successful assignment`);
-      }
+      // Instead of deleting the mapping, we just remove it from the pending delete queue
+      pendingDeleteUntil.delete(code);
+      console.log(`Removed ${code} from grace deletion queue after successful assignment`);
     } catch (error) {
-      console.error(`Failed to delete mapping for ${code} after assign:`, error);
+      console.error(`Failed to mark ${code} as assigned:`, error);
     }
   }
 }
@@ -426,9 +456,12 @@ export function initInviteRoleService(client) {
         await logChannel.send(logMessage).catch(console.error);
       }
 
-      // Mark as assigned if successful DB mapping
+      // Remove from grace queue if successful DB mapping, but keep the mapping in the database
       if (code && result.assigned && (result.type === 'db_mapping' || result.type === 'member_oath')) {
-        await markAssigned(code);
+        if (pendingDeleteUntil.has(code)) {
+          pendingDeleteUntil.delete(code);
+          console.log(`Removed ${code} from grace deletion queue after successful assignment`);
+        }
       }
     } catch (error) {
       console.error('Error in invite-role service member join handler:', error);
