@@ -290,6 +290,8 @@ export async function createTempVCFor(member) {
             [
               `Welcome to your private War Chamber, ${member.displayName}!`,
               '',
+              '**📋 Open the chat panel (→) to see this info easily!**',
+              '',
               '**Invite Your Allies:**',
               `Share this invite link: ${inviteUrl}`,
               '',
@@ -306,6 +308,12 @@ export async function createTempVCFor(member) {
           .setTimestamp();
 
         await warChamber.send({ embeds: [embed] });
+        
+        // Send a follow-up message to encourage opening chat panel
+        await warChamber.send({
+          content: `💬 **Tip:** Click the chat icon (💬) or press \`Ctrl+Shift+T\` to open the chat panel and easily access your invite link and room features!`
+        });
+        
         console.log(`Posted invite info in War Chamber: ${warChamber.name}`);
       } catch (postError) {
         console.error(`Failed to post invite in War Chamber ${warChamber.name}:`, postError);
@@ -413,7 +421,7 @@ export async function handleTempVCInviteJoin(member, inviteCode) {
       console.error(`Failed to grant War Chamber access to ${member.user.tag}:`, permError);
     }
 
-    // Prompt to set WoW nickname (in-channel button)
+    // Prompt to set WoW nickname (in-channel button) + Welcome message for new joiners
     try {
       const row = new ActionRowBuilder().addComponents(
         new ButtonBuilder()
@@ -423,12 +431,23 @@ export async function handleTempVCInviteJoin(member, inviteCode) {
           .setEmoji('🏷'),
       );
 
+      // Welcome message with chat panel instructions
       await channel.send({
-        content: `<@${member.id}> Welcome! Want your nickname set to your **WoW name** for flavor?`,
+        content: [
+          `<@${member.id}> **Welcome to the War Chamber!**`,
+          '',
+          `🗡️ *A new champion joins the fray! May your blade stay sharp and your spells true.*`,
+          '',
+          `💬 **Access chat features:** Click the chat icon or press \`Ctrl+Shift+T\``,
+          `🔗 **Find invite link:** Check the pinned messages above`,
+          `🏷️ **Set your WoW name:** Use the button below or right-click your name → Change Nickname`,
+          '',
+          '*The War Chamber awaits your presence, hero!*'
+        ].join('\n'),
         components: [row],
       });
     } catch (sendErr) {
-      console.warn('Failed to send nickname prompt:', sendErr);
+      console.warn('Failed to send welcome message and nickname prompt:', sendErr);
     }
 
     return { ok: true };
