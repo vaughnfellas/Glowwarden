@@ -92,6 +92,23 @@ export async function getTempInvites() {
   }
 }
 
+// Helper function to check if member has LGBT or Ally role
+function hasOathRole(member) {
+  const roles = member.roles.cache;
+  
+  // Check for any LGBT flair roles
+  const lgbtRoles = [
+    ROLES.LGBTQIA2S_PLUS,
+    // Add any other specific LGBT role IDs here if needed
+  ].filter(Boolean);
+  
+  // Check for Ally role
+  const allyRole = ROLES.ALLY;
+  
+  // Return true if they have any LGBT role or the Ally role
+  return lgbtRoles.some(roleId => roles.has(roleId)) || (allyRole && roles.has(allyRole));
+}
+
 export async function createTempVCFor(member) {
   try {
     if (!client) {
@@ -165,32 +182,59 @@ export async function createTempVCFor(member) {
               ],
             }
           : null,
-        // Members have frictionless access
-        ROLES.MEMBER
-          ? {
-              id: ROLES.MEMBER,
-              allow: [
-                // text-in-voice
-                PermissionFlagsBits.ViewChannel,
-                PermissionFlagsBits.SendMessages,
-                PermissionFlagsBits.AddReactions,
-                PermissionFlagsBits.ReadMessageHistory,
-                PermissionFlagsBits.AttachFiles,
-                PermissionFlagsBits.EmbedLinks,
-                PermissionFlagsBits.UseExternalEmojis,
-                // voice
-                PermissionFlagsBits.Connect,
-                PermissionFlagsBits.Speak,
-                PermissionFlagsBits.UseVAD,
-                PermissionFlagsBits.Stream,
-              ],
-            }
-          : null,
+        // Members with Oath roles (LGBT/Ally) have frictionless access
+        ...(ROLES.LGBTQIA2S_PLUS ? [{
+          id: ROLES.LGBTQIA2S_PLUS,
+          allow: [
+            // text-in-voice
+            PermissionFlagsBits.ViewChannel,
+            PermissionFlagsBits.SendMessages,
+            PermissionFlagsBits.AddReactions,
+            PermissionFlagsBits.ReadMessageHistory,
+            PermissionFlagsBits.AttachFiles,
+            PermissionFlagsBits.EmbedLinks,
+            PermissionFlagsBits.UseExternalEmojis,
+            // voice
+            PermissionFlagsBits.Connect,
+            PermissionFlagsBits.Speak,
+            PermissionFlagsBits.UseVAD,
+            PermissionFlagsBits.Stream,
+          ],
+        }] : []),
+        ...(ROLES.ALLY ? [{
+          id: ROLES.ALLY,
+          allow: [
+            // text-in-voice
+            PermissionFlagsBits.ViewChannel,
+            PermissionFlagsBits.SendMessages,
+            PermissionFlagsBits.AddReactions,
+            PermissionFlagsBits.ReadMessageHistory,
+            PermissionFlagsBits.AttachFiles,
+            PermissionFlagsBits.EmbedLinks,
+            PermissionFlagsBits.UseExternalEmojis,
+            // voice
+            PermissionFlagsBits.Connect,
+            PermissionFlagsBits.Speak,
+            PermissionFlagsBits.UseVAD,
+            PermissionFlagsBits.Stream,
+          ],
+        }] : []),
       ].filter(Boolean),
     });
 
     // Track ownership in memory
     tempOwners.set(warChamber.id, member.id);
+
+    // Assign temp HOST role to the owner
+    const hostRole = guild.roles.cache.get(ROLES.HOST);
+    if (hostRole) {
+      try {
+        await member.roles.add(hostRole, `Temporary HOST role for War Chamber: ${channelName}`);
+        console.log(`Assigned HOST role to ${member.user.tag} for their War Chamber`);
+      } catch (roleError) {
+        console.error(`Failed to assign HOST role to ${member.user.tag}:`, roleError);
+      }
+    }
 
     // Create 24h invite link
     let inviteCode = null;
@@ -334,7 +378,7 @@ export async function handleTempVCInviteJoin(member, inviteCode) {
       return { ok: false, error: 'War Chamber no longer exists' };
     }
 
-    // Assign Stray Spore role
+    // Assign Stray Spore role (they can only access the specific room they were invited to)
     const straySporeRole = guild.roles.cache.get(ROLES.STRAY_SPORE);
     if (straySporeRole) {
       try {
@@ -345,7 +389,7 @@ export async function handleTempVCInviteJoin(member, inviteCode) {
       }
     }
 
-    // Grant per-user access (text-in-voice + voice) to THIS War Chamber
+    // Grant per-user access (text-in-voice + voice) to THIS specific War Chamber only
     try {
       await channel.permissionOverwrites.create(member.id, {
         allow: [
@@ -369,14 +413,14 @@ export async function handleTempVCInviteJoin(member, inviteCode) {
       console.error(`Failed to grant War Chamber access to ${member.user.tag}:`, permError);
     }
 
-    // ——— NEW: prompt to set WoW nickname (in-channel button) ———
+    // Prompt to set WoW nickname (in-channel button)
     try {
       const row = new ActionRowBuilder().addComponents(
         new ButtonBuilder()
           .setCustomId('vc_set_nick')
           .setLabel('Set WoW Nickname')
           .setStyle(ButtonStyle.Primary)
-          .setEmoji('📝'),
+          .setEmoji('🏷'),
       );
 
       await channel.send({
@@ -386,7 +430,6 @@ export async function handleTempVCInviteJoin(member, inviteCode) {
     } catch (sendErr) {
       console.warn('Failed to send nickname prompt:', sendErr);
     }
-    // ————————————————————————————————————————————————————————————
 
     return { ok: true };
   } catch (error) {
@@ -461,6 +504,21 @@ export function getUserTempVC(userId) {
   }
 }
 
+// Helper function to remove HOST role from temp VC owner
+async function removeHostRole(guild, ownerId) {
+  try {
+    const member = await guild.members.fetch(ownerId);
+    const hostRole = guild.roles.cache.get(ROLES.HOST);
+    
+    if (member && hostRole && member.roles.cache.has(ROLES.HOST)) {
+      await member.roles.remove(hostRole, 'War Chamber closed - removing temporary HOST role');
+      console.log(`Removed HOST role from ${member.user.tag} - War Chamber closed`);
+    }
+  } catch (error) {
+    console.error(`Failed to remove HOST role from ${ownerId}:`, error);
+  }
+}
+
 export async function sweepTempRooms() {
   try {
     if (!client) {
@@ -486,6 +544,9 @@ export async function sweepTempRooms() {
 
         // Channel doesn't exist anymore or is expired
         if (!channel || isExpired) {
+          // Remove HOST role from owner before cleanup
+          await removeHostRole(guild, tempVC.owner_id);
+          
           await supabase.from('temp_voice_channels').delete().eq('channel_id', tempVC.channel_id);
           tempOwners.delete(tempVC.channel_id);
           cleanedCount++;
@@ -506,6 +567,9 @@ export async function sweepTempRooms() {
         // Channel is empty (no members)
         if (channel.members.size === 0) {
           try {
+            // Remove HOST role from owner before deleting channel
+            await removeHostRole(guild, tempVC.owner_id);
+            
             await channel.delete('Empty temp War Chamber cleanup');
             await supabase.from('temp_voice_channels').delete().eq('channel_id', tempVC.channel_id);
             tempOwners.delete(tempVC.channel_id);
@@ -517,6 +581,8 @@ export async function sweepTempRooms() {
         }
       } catch (channelError) {
         console.error(`Error checking temp channel ${tempVC.channel_id}:`, channelError);
+        // Remove HOST role from owner even on error
+        await removeHostRole(guild, tempVC.owner_id);
         await supabase.from('temp_voice_channels').delete().eq('channel_id', tempVC.channel_id);
         tempOwners.delete(tempVC.channel_id);
         cleanedCount++;
@@ -590,6 +656,18 @@ export async function forceCleanupTempVC(channelId) {
     const guild = client.guilds.cache.get(config.GUILD_ID);
     if (!guild) {
       return { ok: false, error: 'Guild not found' };
+    }
+
+    // Get owner info before cleanup
+    const { data: tempVC } = await supabase
+      .from('temp_voice_channels')
+      .select('owner_id')
+      .eq('channel_id', channelId)
+      .single();
+
+    if (tempVC) {
+      // Remove HOST role from owner
+      await removeHostRole(guild, tempVC.owner_id);
     }
 
     const channel = guild.channels.cache.get(channelId);

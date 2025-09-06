@@ -222,7 +222,7 @@ export async function execute(interaction) {
           } catch (err) {
             console.error('Failed to set nickname:', err);
             // Common cause: missing "Manage Nicknames" permission for the bot or user above bot in role list
-            await interaction.editReply('⚠️ I couldn't change your nickname. An admin may need to grant me **Manage Nicknames** or move my role higher.');
+            await interaction.editReply('⚠️ I couldn\'t change your nickname. An admin may need to grant me **Manage Nicknames** or move my role higher.');
           }
         } else {
           console.warn(`Unhandled modal submission: ${customId}`);
