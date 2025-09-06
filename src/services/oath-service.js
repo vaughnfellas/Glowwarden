@@ -127,7 +127,7 @@ export function buildOnboardingTips({ wowName, chosenClass, chosenRole, realm, c
     '**Your Sworn Oath:**',
     '',
     `*By the light of the sacred mushrooms and the rainbow spores that bind us,`,
-    `I, **${wowName}**, ${classEmoji} **${cls}**${roleDisplay} of **${realm}**,`,
+    `I, **${wowName}**, **${cls}* *${roleDisplay} of **${realm}**,`,
     'pledge to honor the Empire\'s tenets:*',
     '',
     '• To embrace all souls who seek refuge beneath our banners',
@@ -146,7 +146,7 @@ export async function postShortPublicWelcome({ channel, member, wowName, realm, 
   const displayRole = getDisplayRole(member);
   const cls = chosenClass && chosenClass !== 'Other' ? chosenClass : '—';
   return channel.send({
-    content: `Welcome **${displayRole}** <@${member.id}> — ${classEmoji} **${cls}** of **${realm}**!`
+    content: `Welcome **${displayRole}** <@${member.id}> — **${cls}** of **${realm}**!`
   });
 }
 

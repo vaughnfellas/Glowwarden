@@ -134,18 +134,7 @@ async function startOathCeremony(member, roleId) {
       return false;
     }
     
-    // Send a DM to the user
-    try {
-      await member.send({
-        content: `Welcome to the Holy Gehy Empire, ${member.user.username}!\n\nPlease visit <#${CHANNELS.CHAMBER_OF_OATHS}> to complete your oath ceremony and claim your final role.`
-      });
-      console.log(`Sent welcome DM to ${member.user.tag}`);
-    } catch (dmError) {
-      console.warn(`Could not send DM to ${member.user.tag}:`, dmError);
-      // Continue even if DM fails - they can still see the channel mention
-    }
-    
-    // Mention the user in the oath channel
+        // Mention the user in the oath channel
     await oathChannel.send({
       content: `Welcome <@${member.id}>! Please complete your oath ceremony by clicking the buttons on the pinned Imperial Decree message above.`
     });
