@@ -97,6 +97,36 @@ export async function execute(interaction) {
         // DM tips button
         else if (customId === CEREMONY_IDS.dmTipsButton) {
           await handleDMTips(interaction);
+        }
+        else if (customId === 'vc_set_nick') {
+          // Only let the clicker set their own nickname
+          if (!interaction.inGuild()) {
+            return interaction.reply({ content: 'This action must be used in the server.', flags: MessageFlags.Ephemeral });
+          }
+          // Show a simple modal to collect WoW name + optional realm
+          const modal = new ModalBuilder()
+            .setCustomId('vc_set_nick_modal')
+            .setTitle('Set WoW Nickname');
+
+          const nameInput = new TextInputBuilder()
+            .setCustomId('wow_name')
+            .setLabel('WoW Character Name')
+            .setStyle(TextInputStyle.Short)
+            .setMinLength(2)
+            .setMaxLength(32)
+            .setRequired(true);
+
+          const realmInput = new TextInputBuilder()
+            .setCustomId('wow_realm')
+            .setLabel('Realm (optional)')
+            .setStyle(TextInputStyle.Short)
+            .setRequired(false);
+
+          const row1 = new ActionRowBuilder().addComponents(nameInput);
+          const row2 = new ActionRowBuilder().addComponents(realmInput);
+          modal.addComponents(row1, row2);
+
+          await interaction.showModal(modal);
         } else {
           console.warn(`Unhandled button interaction: ${customId}`);
           if (!interaction.replied && !interaction.deferred) {
@@ -170,6 +200,30 @@ export async function execute(interaction) {
           await handleCharacterModal(interaction);
         } else if (customId.startsWith('alt_')) {
           await alt.handleModalSubmit(interaction);
+        } else if (customId === 'vc_set_nick_modal') {
+          await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+
+          try {
+            if (!interaction.inGuild()) {
+              return interaction.editReply('This action must be used in the server.');
+            }
+
+            const wowName = interaction.fields.getTextInputValue('wow_name')?.trim();
+            const realm = interaction.fields.getTextInputValue('wow_realm')?.trim();
+
+            if (!wowName || wowName.length < 2) {
+              return interaction.editReply('Please provide a valid WoW name (at least 2 characters).');
+            }
+
+            const desiredNick = realm ? `${wowName} - ${realm}` : wowName;
+
+            await interaction.member.setNickname(desiredNick, 'Set via War Chamber nickname modal');
+            await interaction.editReply(`✅ Your nickname has been set to **${desiredNick}**`);
+          } catch (err) {
+            console.error('Failed to set nickname:', err);
+            // Common cause: missing "Manage Nicknames" permission for the bot or user above bot in role list
+            await interaction.editReply('⚠️ I couldn't change your nickname. An admin may need to grant me **Manage Nicknames** or move my role higher.');
+          }
         } else {
           console.warn(`Unhandled modal submission: ${customId}`);
           if (!interaction.replied && !interaction.deferred) {

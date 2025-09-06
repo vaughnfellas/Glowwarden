@@ -1,7 +1,14 @@
 // src/services/temp-vc-service.js
-import { ChannelType, PermissionFlagsBits, EmbedBuilder } from 'discord.js';
+import {
+  ChannelType,
+  PermissionFlagsBits,
+  EmbedBuilder,
+  ActionRowBuilder,
+  ButtonBuilder,
+  ButtonStyle,
+} from 'discord.js';
 import { config } from '../config.js';
-import { ROLES, getRoleName, getDisplayRole, findBaseRole } from '../roles.js';
+import { ROLES } from '../roles.js';
 import { supabase } from '../db.js';
 
 // In-memory storage for temp VC owners
@@ -73,7 +80,7 @@ export async function getTempInvites() {
         tempInvites.set(invite.channel_id, {
           code: invite.invite_code,
           expires: new Date(invite.expires_at).getTime(),
-          ownerId: invite.owner_id
+          ownerId: invite.owner_id,
         });
       }
     }
@@ -93,57 +100,108 @@ export async function createTempVCFor(member) {
 
     const guild = member.guild;
     const battlefrontCategory = guild.channels.cache.get(config.BATTLEFRONT_CATEGORY_ID);
-    
+
     if (!battlefrontCategory) {
       return { ok: false, error: 'Battlefront category not found' };
     }
 
     // Generate channel name
     const channelName = `War Chamber — ${member.displayName}`;
-    
+
     // Create the voice channel
     const warChamber = await guild.channels.create({
       name: channelName,
       type: ChannelType.GuildVoice,
       parent: battlefrontCategory.id,
       permissionOverwrites: [
+        // Lock down by default
         {
           id: guild.roles.everyone,
-          deny: [PermissionFlagsBits.Connect],
+          deny: [
+            PermissionFlagsBits.ViewChannel,
+            PermissionFlagsBits.Connect,
+          ],
         },
+        // Room owner
         {
           id: member.id,
           allow: [
+            // text-in-voice
+            PermissionFlagsBits.ViewChannel,
+            PermissionFlagsBits.SendMessages,
+            PermissionFlagsBits.AddReactions,
+            PermissionFlagsBits.ReadMessageHistory,
+            PermissionFlagsBits.AttachFiles,
+            PermissionFlagsBits.EmbedLinks,
+            PermissionFlagsBits.UseExternalEmojis,
+            // voice
             PermissionFlagsBits.Connect,
             PermissionFlagsBits.Speak,
             PermissionFlagsBits.UseVAD,
+            PermissionFlagsBits.Stream,
+            // owner tools
             PermissionFlagsBits.ManageChannels,
             PermissionFlagsBits.ManageRoles,
           ],
         },
-        // Allow guild members to connect (not Stray Spores)
-        ...[ROLES.MEMBER, ROLES.OFFICER, ROLES.VETERAN]
-          .filter(roleId => roleId)
-          .map(roleId => ({
-            id: roleId,
-            allow: [PermissionFlagsBits.Connect, PermissionFlagsBits.Speak, PermissionFlagsBits.UseVAD],
-          })),
-      ],
+        // Moderators: @TheCourt
+        ROLES.THE_COURT
+          ? {
+              id: ROLES.THE_COURT,
+              allow: [
+                // text-in-voice
+                PermissionFlagsBits.ViewChannel,
+                PermissionFlagsBits.SendMessages,
+                PermissionFlagsBits.AddReactions,
+                PermissionFlagsBits.ReadMessageHistory,
+                PermissionFlagsBits.AttachFiles,
+                PermissionFlagsBits.EmbedLinks,
+                PermissionFlagsBits.UseExternalEmojis,
+                // voice
+                PermissionFlagsBits.Connect,
+                PermissionFlagsBits.Speak,
+                PermissionFlagsBits.UseVAD,
+                PermissionFlagsBits.Stream,
+              ],
+            }
+          : null,
+        // Members have frictionless access
+        ROLES.MEMBER
+          ? {
+              id: ROLES.MEMBER,
+              allow: [
+                // text-in-voice
+                PermissionFlagsBits.ViewChannel,
+                PermissionFlagsBits.SendMessages,
+                PermissionFlagsBits.AddReactions,
+                PermissionFlagsBits.ReadMessageHistory,
+                PermissionFlagsBits.AttachFiles,
+                PermissionFlagsBits.EmbedLinks,
+                PermissionFlagsBits.UseExternalEmojis,
+                // voice
+                PermissionFlagsBits.Connect,
+                PermissionFlagsBits.Speak,
+                PermissionFlagsBits.UseVAD,
+                PermissionFlagsBits.Stream,
+              ],
+            }
+          : null,
+      ].filter(Boolean),
     });
 
     // Track ownership in memory
     tempOwners.set(warChamber.id, member.id);
-    
+
     // Create 24h invite link
     let inviteCode = null;
     let inviteUrl = null;
     try {
       const invite = await warChamber.createInvite({
         maxAge: 86400, // 24 hours
-        maxUses: 0, // unlimited uses
-        reason: `24h invite for ${member.displayName}'s War Chamber`
+        maxUses: 0, // unlimited
+        reason: `24h invite for ${member.displayName}'s War Chamber`,
       });
-      
+
       inviteCode = invite.code;
       inviteUrl = invite.url;
       console.log(`Created 24h invite for War Chamber: ${inviteUrl}`);
@@ -152,19 +210,17 @@ export async function createTempVCFor(member) {
     }
 
     // Store in database
-    const expiresAt = new Date(Date.now() + 86400000); // 24 hours from now
+    const expiresAt = new Date(Date.now() + 86400000);
     try {
-      const { error: dbError } = await supabase
-        .from('temp_voice_channels')
-        .insert({
-          channel_id: warChamber.id,
-          owner_id: member.id,
-          guild_id: guild.id,
-          channel_name: channelName,
-          invite_code: inviteCode,
-          expires_at: expiresAt.toISOString(),
-          created_at: new Date().toISOString()
-        });
+      const { error: dbError } = await supabase.from('temp_voice_channels').insert({
+        channel_id: warChamber.id,
+        owner_id: member.id,
+        guild_id: guild.id,
+        channel_name: channelName,
+        invite_code: inviteCode,
+        expires_at: expiresAt.toISOString(),
+        created_at: new Date().toISOString(),
+      });
 
       if (dbError) {
         console.error('Failed to save temp VC to database:', dbError);
@@ -181,26 +237,28 @@ export async function createTempVCFor(member) {
       console.error(`Failed to move ${member.user.tag} to new War Chamber:`, moveError);
     }
 
-    // Post invite in the channel if we created one
+    // Post invite in the channel
     if (inviteCode && inviteUrl) {
       try {
         const embed = new EmbedBuilder()
           .setTitle('War Chamber Ready!')
-          .setDescription([
-            `Welcome to your private War Chamber, ${member.displayName}!`,
-            '',
-            '**Invite Your Allies:**',
-            `Share this invite link: ${inviteUrl}`,
-            '',
-            '**Features:**',
-            '• 24-hour access for you and invited members',
-            '• You can manage permissions and kick members',
-            '• Automatically cleaned up when empty',
-            '',
-            '**Need Help?**',
-            'Use `/vc` commands to manage your War Chamber.'
-          ].join('\n'))
-          .setColor(0x8B4513)
+          .setDescription(
+            [
+              `Welcome to your private War Chamber, ${member.displayName}!`,
+              '',
+              '**Invite Your Allies:**',
+              `Share this invite link: ${inviteUrl}`,
+              '',
+              '**Features:**',
+              '• 24-hour access for you and invited members',
+              '• You can manage permissions and kick members',
+              '• Automatically cleaned up when empty',
+              '',
+              '**Need Help?**',
+              'Use `/vc` commands to manage your War Chamber.',
+            ].join('\n'),
+          )
+          .setColor(0x8b4513)
           .setTimestamp();
 
         await warChamber.send({ embeds: [embed] });
@@ -210,25 +268,27 @@ export async function createTempVCFor(member) {
       }
     }
 
-    // Send DM to the owner
+    // DM to owner
     try {
       const dmEmbed = new EmbedBuilder()
         .setTitle('Your War Chamber is Ready!')
-        .setDescription([
-          `Your War Chamber **${channelName}** has been created successfully!`,
-          '',
-          inviteUrl ? `**Invite Link:** ${inviteUrl}` : '**Invite:** Failed to create invite link',
-          `**Channel:** ${warChamber}`,
-          `**Valid For:** 24 hours`,
-          '',
-          '**What you can do:**',
-          '• Invite friends using the link above',
-          '• Manage permissions for specific users',
-          '• Use `/vc` commands for additional control',
-          '',
-          '**Note:** Your War Chamber will be automatically deleted when empty or after 24 hours.',
-        ].join('\n'))
-        .setColor(0x8B4513)
+        .setDescription(
+          [
+            `Your War Chamber **${channelName}** has been created successfully!`,
+            '',
+            inviteUrl ? `**Invite Link:** ${inviteUrl}` : '**Invite:** Failed to create invite link',
+            `**Channel:** ${warChamber}`,
+            `**Valid For:** 24 hours`,
+            '',
+            '**What you can do:**',
+            '• Invite friends using the link above',
+            '• Manage permissions for specific users',
+            '• Use `/vc` commands for additional control',
+            '',
+            '**Note:** Your War Chamber will be automatically deleted when empty or after 24 hours.',
+          ].join('\n'),
+        )
+        .setColor(0x8b4513)
         .setTimestamp();
 
       await member.send({ embeds: [dmEmbed] });
@@ -238,7 +298,6 @@ export async function createTempVCFor(member) {
     }
 
     return { ok: true, channel: warChamber, invite: inviteUrl };
-    
   } catch (error) {
     console.error('Error creating temp VC:', error);
     return { ok: false, error: error.message };
@@ -267,13 +326,10 @@ export async function handleTempVCInviteJoin(member, inviteCode) {
 
     const guild = member.guild;
     const channel = guild.channels.cache.get(tempVC.channel_id);
-    
+
     if (!channel) {
       console.log(`Temp VC channel ${tempVC.channel_id} not found, cleaning up from database`);
-      await supabase
-        .from('temp_voice_channels')
-        .delete()
-        .eq('channel_id', tempVC.channel_id);
+      await supabase.from('temp_voice_channels').delete().eq('channel_id', tempVC.channel_id);
       tempOwners.delete(tempVC.channel_id);
       return { ok: false, error: 'War Chamber no longer exists' };
     }
@@ -289,20 +345,50 @@ export async function handleTempVCInviteJoin(member, inviteCode) {
       }
     }
 
-    // Grant access to the War Chamber
+    // Grant per-user access (text-in-voice + voice) to THIS War Chamber
     try {
       await channel.permissionOverwrites.create(member.id, {
-        Connect: true,
-        Speak: true,
-        UseVAD: true,
+        allow: [
+          // text-in-voice
+          PermissionFlagsBits.ViewChannel,
+          PermissionFlagsBits.SendMessages,
+          PermissionFlagsBits.AddReactions,
+          PermissionFlagsBits.ReadMessageHistory,
+          PermissionFlagsBits.AttachFiles,
+          PermissionFlagsBits.EmbedLinks,
+          PermissionFlagsBits.UseExternalEmojis,
+          // voice
+          PermissionFlagsBits.Connect,
+          PermissionFlagsBits.Speak,
+          PermissionFlagsBits.UseVAD,
+          PermissionFlagsBits.Stream,
+        ],
       });
       console.log(`Granted War Chamber access to ${member.user.tag} for ${channel.name}`);
     } catch (permError) {
       console.error(`Failed to grant War Chamber access to ${member.user.tag}:`, permError);
     }
 
+    // ——— NEW: prompt to set WoW nickname (in-channel button) ———
+    try {
+      const row = new ActionRowBuilder().addComponents(
+        new ButtonBuilder()
+          .setCustomId('vc_set_nick')
+          .setLabel('Set WoW Nickname')
+          .setStyle(ButtonStyle.Primary)
+          .setEmoji('📝'),
+      );
+
+      await channel.send({
+        content: `<@${member.id}> Welcome! Want your nickname set to your **WoW name** for flavor?`,
+        components: [row],
+      });
+    } catch (sendErr) {
+      console.warn('Failed to send nickname prompt:', sendErr);
+    }
+    // ————————————————————————————————————————————————————————————
+
     return { ok: true };
-    
   } catch (error) {
     console.error('Error handling temp VC invite join:', error);
     return { ok: false, error: error.message };
@@ -328,7 +414,7 @@ export async function isWarChamberInvite(code) {
 export async function grantAccessToMember(member, channelId) {
   try {
     const channel = member.guild.channels.cache.get(channelId);
-    
+
     if (!channel) {
       return { success: false, message: 'War Chamber not found' };
     }
@@ -338,14 +424,25 @@ export async function grantAccessToMember(member, channelId) {
     }
 
     await channel.permissionOverwrites.create(member.id, {
-      Connect: true,
-      Speak: true,
-      UseVAD: true,
+      allow: [
+        // text-in-voice
+        PermissionFlagsBits.ViewChannel,
+        PermissionFlagsBits.SendMessages,
+        PermissionFlagsBits.AddReactions,
+        PermissionFlagsBits.ReadMessageHistory,
+        PermissionFlagsBits.AttachFiles,
+        PermissionFlagsBits.EmbedLinks,
+        PermissionFlagsBits.UseExternalEmojis,
+        // voice
+        PermissionFlagsBits.Connect,
+        PermissionFlagsBits.Speak,
+        PermissionFlagsBits.UseVAD,
+        PermissionFlagsBits.Stream,
+      ],
     });
 
     console.log(`Granted access to ${member.user.tag} for War Chamber: ${channel.name}`);
     return { success: true };
-    
   } catch (error) {
     console.error('Error granting access to member:', error);
     return { success: false, message: 'Failed to grant access' };
@@ -355,9 +452,7 @@ export async function grantAccessToMember(member, channelId) {
 export function getUserTempVC(userId) {
   try {
     for (const [channelId, ownerId] of tempOwners.entries()) {
-      if (ownerId === userId) {
-        return channelId;
-      }
+      if (ownerId === userId) return channelId;
     }
     return null;
   } catch (error) {
@@ -374,15 +469,11 @@ export async function sweepTempRooms() {
 
     let cleanedCount = 0;
     const guild = client.guilds.cache.get(config.GUILD_ID);
-    
     if (!guild) {
       return { ok: false, error: 'Guild not found', cleaned: 0 };
     }
 
-    const { data: tempVCs, error } = await supabase
-      .from('temp_voice_channels')
-      .select('*');
-
+    const { data: tempVCs, error } = await supabase.from('temp_voice_channels').select('*');
     if (error) {
       console.error('Error fetching temp VCs for cleanup:', error);
       return { ok: false, error: error.message, cleaned: 0 };
@@ -392,17 +483,13 @@ export async function sweepTempRooms() {
       try {
         const channel = guild.channels.cache.get(tempVC.channel_id);
         const isExpired = new Date(tempVC.expires_at) < new Date();
-        
+
         // Channel doesn't exist anymore or is expired
         if (!channel || isExpired) {
-          await supabase
-            .from('temp_voice_channels')
-            .delete()
-            .eq('channel_id', tempVC.channel_id);
-          
+          await supabase.from('temp_voice_channels').delete().eq('channel_id', tempVC.channel_id);
           tempOwners.delete(tempVC.channel_id);
           cleanedCount++;
-          
+
           if (channel && isExpired) {
             try {
               await channel.delete('Expired temp War Chamber cleanup');
@@ -420,11 +507,7 @@ export async function sweepTempRooms() {
         if (channel.members.size === 0) {
           try {
             await channel.delete('Empty temp War Chamber cleanup');
-            await supabase
-              .from('temp_voice_channels')
-              .delete()
-              .eq('channel_id', tempVC.channel_id);
-            
+            await supabase.from('temp_voice_channels').delete().eq('channel_id', tempVC.channel_id);
             tempOwners.delete(tempVC.channel_id);
             cleanedCount++;
             console.log(`Deleted empty temp War Chamber: ${channel.name}`);
@@ -432,13 +515,9 @@ export async function sweepTempRooms() {
             console.error(`Failed to delete empty War Chamber ${tempVC.channel_id}:`, deleteError);
           }
         }
-        
       } catch (channelError) {
         console.error(`Error checking temp channel ${tempVC.channel_id}:`, channelError);
-        await supabase
-          .from('temp_voice_channels')
-          .delete()
-          .eq('channel_id', tempVC.channel_id);
+        await supabase.from('temp_voice_channels').delete().eq('channel_id', tempVC.channel_id);
         tempOwners.delete(tempVC.channel_id);
         cleanedCount++;
       }
@@ -446,7 +525,6 @@ export async function sweepTempRooms() {
 
     console.log(`Temp room sweep completed. Cleaned up ${cleanedCount} channels.`);
     return { ok: true, cleaned: cleanedCount };
-    
   } catch (error) {
     console.error('Error in sweepTempRooms:', error);
     return { ok: false, error: error.message, cleaned: 0 };
@@ -486,7 +564,7 @@ export async function getTempVCStats() {
           memberCount: channel.members.size,
           ownerId: tempVC.owner_id,
           inviteCode: tempVC.invite_code,
-          inviteExpires: new Date(tempVC.expires_at).getTime()
+          inviteExpires: new Date(tempVC.expires_at).getTime(),
         });
         ownerIds.push(tempVC.owner_id);
       }
@@ -495,7 +573,7 @@ export async function getTempVCStats() {
     return {
       totalActive: activeChannels.length,
       owners: ownerIds,
-      channels: activeChannels
+      channels: activeChannels,
     };
   } catch (error) {
     console.error('Error getting temp VC stats:', error);
@@ -515,21 +593,14 @@ export async function forceCleanupTempVC(channelId) {
     }
 
     const channel = guild.channels.cache.get(channelId);
-    
     if (channel) {
       await channel.delete('Force cleanup by admin');
     }
-    
-    await supabase
-      .from('temp_voice_channels')
-      .delete()
-      .eq('channel_id', channelId);
-    
+
+    await supabase.from('temp_voice_channels').delete().eq('channel_id', channelId);
     tempOwners.delete(channelId);
     console.log(`Force cleaned up temp VC: ${channelId}`);
-    
     return { ok: true };
-    
   } catch (error) {
     console.error('Error force cleaning up temp VC:', error);
     return { ok: false, error: error.message };
